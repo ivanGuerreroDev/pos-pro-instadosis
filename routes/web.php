@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers as Web;
+use App\Http\Controllers\Admin as Admin;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 
@@ -27,6 +28,10 @@ Route::get('/payment/failed', [Web\PaymentController::class, 'failed'])->name('p
 Route::post('ssl-commerz/payment/success', [Web\PaymentController::class, 'sslCommerzSuccess']);
 Route::post('ssl-commerz/payment/failed', [Web\PaymentController::class, 'sslCommerzFailed']);
 Route::get('/order-status', [Web\PaymentController::class, 'orderStatus'])->name('order.status');
+
+// Ubicaciones DGI
+Route::get('admin/dgi/districts/{province}', [Admin\DgiUbiCodesController::class, 'getDistricts'])->name('admin.dgi.districts');
+Route::get('admin/dgi/townships/{district}', [Admin\DgiUbiCodesController::class, 'getTownships'])->name('admin.dgi.townships');
 
 Route::get('/cache-clear', function () {
     Artisan::call('cache:clear');

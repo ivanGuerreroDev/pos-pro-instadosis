@@ -37,20 +37,38 @@ class BusinessController extends Controller
             'pictureUrl' => 'nullable|image|max:5120',
             'shopOpeningBalance' => 'nullable|numeric',
             'business_category_id' => 'required|exists:business_categories,id',
+            'dtipoRuc' => 'required|in:Natural,Jurídico',
+            'druc' => 'required|string',
+            'ddv' => 'required|string',
+            'dnombEm' => 'required_if:dtipoRuc,Jurídico|string',
+            'dcoordEm' => 'nullable|string',
+            'ddirecEm' => 'nullable|string',
+            'dcorreg' => 'nullable|string',
+            'ddistr' => 'nullable|string',
+            'dprov' => 'nullable|string',
+            'dtfnEm' => 'nullable|string',
+            'dcorElectEmi' => 'nullable|email'
         ]);
 
         DB::beginTransaction();
         try {
-
             $user = auth()->user();
             $free_plan = Plan::where('subscriptionPrice', '<=', 0)->orWhere('offerPrice', '<=', 0)->first();
 
-            $business = Business::create($request->except('pictureUrl') + [
-                            'phoneNumber' => $request->phoneNumber,
-                            'subscriptionDate' => $free_plan ? now() : NULL,
-                            'will_expire' => now()->addDays($free_plan->duration),
-                            'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl') : NULL
-                        ]);
+            $business = Business::create($request->except(['pictureUrl', 'dtipoRuc', 'druc', 'ddv', 'dnombEm', 'dcoordEm', 'ddirecEm', 'dcodUbi', 'dcorreg', 'ddistr', 'dprov', 'dtfnEm', 'dcorElectEmi']) + [
+                'phoneNumber' => $request->phoneNumber,
+                'subscriptionDate' => $free_plan ? now() : NULL,
+                'will_expire' => now()->addDays($free_plan->duration),
+                'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl') : NULL
+            ]);
+
+            // Create invoice data
+            $request->merge(['dcodUbi' => $request->dcorreg]);
+            $business->invoice_data()->create($request->only([
+                'dtipoRuc', 'druc', 'ddv', 'dnombEm', 'dcoordEm', 
+                'ddirecEm', 'dcodUbi', 'dcorreg', 'ddistr', 'dprov',
+                'dtfnEm', 'dcorElectEmi'
+            ]));
 
             $user->update([
                 'business_id' => $business->id,
@@ -89,23 +107,53 @@ class BusinessController extends Controller
             'pictureUrl' => 'nullable|image|max:5120',
             'business_category_id' => 'required|exists:business_categories,id',
             'phoneNumber'  => ['nullable', 'min:5', 'max:15'],
+            'dtipoRuc' => 'required|in:Natural,Jurídico',
+            'druc' => 'required|string',
+            'ddv' => 'required|string',
+            'dnombEm' => 'required_if:dtipoRuc,Jurídico|string',
+            'dcoordEm' => 'nullable|string',
+            'ddirecEm' => 'nullable|string',
+            'dcorreg' => 'nullable|string',
+            'ddistr' => 'nullable|string',
+            'dprov' => 'nullable|string',
+            'dtfnEm' => 'nullable|string',
+            'dcorElectEmi' => 'nullable|email'
         ]);
 
-        auth()->user()->update([
-            'name' => $request->companyName,
-            'phone' => $request->phoneNumber,
-        ]);
+        DB::beginTransaction();
+        try {
+            auth()->user()->update([
+                'name' => $request->companyName,
+                'phone' => $request->phoneNumber,
+            ]);
 
-        $business->address = $request->address;
-        $business->phoneNumber = $request->phoneNumber;
-        $business->companyName = $request->companyName;
-        $business->business_category_id = $request->business_category_id;
-        $business->pictureUrl = $request->pictureUrl ? $this->upload($request, 'pictureUrl', $business->pictureUrl) : $business->pictureUrl;
-        $business->save();
+            $business->update([
+                'address' => $request->address,
+                'phoneNumber' => $request->phoneNumber,
+                'companyName' => $request->companyName,
+                'business_category_id' => $request->business_category_id,
+                'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl', $business->pictureUrl) : $business->pictureUrl,
+            ]);
 
-        return response()->json([
-            'message' => __('Data saved successfully.'),
-            'business' => $business,
-        ]);
+            // Update or create invoice data
+            $request->merge(['dcodUbi' => $request->dcorreg]);
+            $business->invoice_data()->updateOrCreate(
+                ['business_id' => $business->id],
+                $request->only([
+                    'dtipoRuc', 'druc', 'ddv', 'dnombEm', 'dcoordEm', 
+                    'ddirecEm', 'dcodUbi', 'dcorreg', 'ddistr', 'dprov',
+                    'dtfnEm', 'dcorElectEmi'
+                ])
+            );
+
+            DB::commit();
+            return response()->json([
+                'message' => __('Data saved successfully.'),
+                'business' => $business->load('invoice_data'),
+            ]);
+        } catch (\Throwable $th) {
+            DB::rollback();
+            return response()->json(__('Something went wrong.'), 403);
+        }
     }
 }

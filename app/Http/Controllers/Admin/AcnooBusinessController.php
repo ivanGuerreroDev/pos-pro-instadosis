@@ -10,6 +10,7 @@ use App\Helpers\HasUploader;
 use Illuminate\Http\Request;
 use App\Models\PlanSubscribe;
 use App\Models\BusinessCategory;
+use App\Models\DgiUbiCodes;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
@@ -67,9 +68,12 @@ class AcnooBusinessController extends Controller
     {
         $plans = Plan::where('status', 1)->latest()->get();
         $categories = BusinessCategory::latest()->get();
-        return view('admin.business.create', compact('plans', 'categories'));
+        $provinces = DgiUbiCodes::select('codigo', 'nombre')
+            ->where('tipo', 'provincia')
+            ->orderBy('nombre')
+            ->get();
+        return view('admin.business.create', compact('plans', 'categories', 'provinces'));
     }
-
 
     public function store(Request $request)
     {
@@ -83,6 +87,17 @@ class AcnooBusinessController extends Controller
             'shopOpeningBalance' => 'nullable|numeric',
             'business_category_id' => 'required|exists:business_categories,id',
             'plan_subscribe_id' => 'nullable|exists:plans,id',
+            'dtipoRuc' => 'required|in:Natural,Jurídico',
+            'druc' => 'required|string',
+            'ddv' => 'required|string',
+            'dnombEm' => 'required_if:dtipoRuc,Jurídico|string',
+            'dcoordEm' => 'nullable|string',
+            'ddirecEm' => 'nullable|string',
+            'dcorreg' => 'nullable|string',
+            'ddistr' => 'nullable|string',
+            'dprov' => 'nullable|string',
+            'dtfnEm' => 'nullable|string',
+            'dcorElectEmi' => 'nullable|email'
         ]);
 
         DB::beginTransaction();
@@ -135,6 +150,14 @@ class AcnooBusinessController extends Controller
                 sendNotification($subscribe->id, route('admin.subscription-reports.index', ['id' => $subscribe->id]), __('Plan subscribed by ' . $user->name));
             }
 
+            // Create invoice data
+            $request->merge(['dcodUbi' => $request->dcorreg]);
+            $business->invoice_data()->create($request->only([
+                'dtipoRuc', 'druc', 'ddv', 'dnombEm', 'dcoordEm', 
+                'ddirecEm', 'dcodUbi', 'dcorreg', 'ddistr', 'dprov',
+                'dtfnEm', 'dcorElectEmi'
+            ]));
+
             DB::commit();
 
             return response()->json([
@@ -153,7 +176,30 @@ class AcnooBusinessController extends Controller
         $business = Business::findOrFail($id);
         $categories = BusinessCategory::latest()->get();
         $user = User::where('business_id', $business->id)->firstOrFail();
-        return view('admin.business.edit', compact('business', 'plans', 'categories','user'));
+        $provinces = DgiUbiCodes::select('codigo', 'nombre')
+            ->where('tipo', 'provincia')
+            ->orderBy('nombre')
+            ->get();
+            
+        $districts = collect();
+        $townships = collect();
+        
+        if ($business->invoice_data?->dprov) {
+            $districts = DgiUbiCodes::select('codigo', 'nombre')
+                ->where('tipo', 'distrito')
+                ->where('codigo', 'like', $business->invoice_data->dprov . '%')
+                ->orderBy('nombre')
+                ->get();
+                
+            if ($business->invoice_data?->ddistr) {
+                $townships = DgiUbiCodes::select('codigo', 'nombre')
+                    ->where('tipo', 'corregimiento')
+                    ->where('codigo', 'like', $business->invoice_data->ddistr . '%')
+                    ->orderBy('nombre')
+                    ->get();
+            }
+        }
+        return view('admin.business.edit', compact('business', 'plans', 'categories','user', 'provinces', 'districts', 'townships'));
     }
 
     public function update(Request $request, string $id)
@@ -168,6 +214,17 @@ class AcnooBusinessController extends Controller
             'shopOpeningBalance' => 'nullable|numeric',
             'business_category_id' => 'required|exists:business_categories,id',
             'plan_subscribe_id' => 'nullable|exists:plans,id',
+            'dtipoRuc' => 'required|in:Natural,Jurídico',
+            'druc' => 'required|string',
+            'ddv' => 'required|string',
+            'dnombEm' => 'required_if:dtipoRuc,Jurídico|string',
+            'dcoordEm' => 'nullable|string',
+            'ddirecEm' => 'nullable|string',
+            'dcorreg' => 'nullable|string',
+            'ddistr' => 'nullable|string',
+            'dprov' => 'nullable|string',
+            'dtfnEm' => 'nullable|string',
+            'dcorElectEmi' => 'nullable|email'
         ]);
 
         DB::beginTransaction();
@@ -213,6 +270,17 @@ class AcnooBusinessController extends Controller
 
                 sendNotification($subscribe->id, route('admin.subscription-reports.index', ['id' => $subscribe->id]), __('Plan subscribed by ' . auth()->user()->name));
             }
+
+            // Update or create invoice data
+            $request->merge(['dcodUbi' => $request->dcorreg]);
+            $business->invoice_data()->updateOrCreate(
+                ['business_id' => $business->id],
+                $request->only([
+                    'dtipoRuc', 'druc', 'ddv', 'dnombEm', 'dcoordEm', 
+                    'ddirecEm', 'dcodUbi', 'dcorreg', 'ddistr', 'dprov',
+                    'dtfnEm', 'dcorElectEmi'
+                ])
+            );
 
             DB::commit();
 
