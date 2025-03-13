@@ -38,6 +38,11 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('income-categories', Api\AcnooIncomeCategoryController::class)->except('show');
         Route::apiResource('incomes', Api\AcnooIncomeController::class)->only('index', 'store');
 
+        Route::get('locations/provinces', [Api\DgiUbiCodesController::class, 'getProvinces']);
+        Route::get('locations/districts/{province}', [Api\DgiUbiCodesController::class, 'getDistricts']);
+        Route::get('locations/townships/{district}', [Api\DgiUbiCodesController::class, 'getTownships']);
+        Route::get('locations/{type}', [Api\DgiUbiCodesController::class, 'getByType']);
+
         Route::apiResource('banners', Api\AcnooBannerController::class)->only('index');
         Route::apiResource('lang', Api\AcnooLanguageController::class)->only('index', 'store');
         Route::apiResource('profile', Api\AcnooProfileController::class)->only('index', 'store');

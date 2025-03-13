@@ -1016,3 +1016,10 @@
 @push('js')
     <script src="{{ asset('assets/js/custom/custom.js') }}"></script>
 @endpush
+
+<div class="tab-pane fade" id="emagic_integration">
+    <div class="form-group">
+        <label>{{ __('API Key') }}</label>
+        <input type="text" name="emagic_api_key" value="{{ $page_data['headings']['emagic_api_key'] ?? '' }}" class="form-control" placeholder="{{ __('Enter API Key') }}">
+    </div>
+</div>

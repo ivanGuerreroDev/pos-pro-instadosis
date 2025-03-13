@@ -52,7 +52,6 @@
                                 <div class="card-body">
                                     <form action="{{ route('admin.system-settings.store') }}" method="post" class="ajaxform">
                                         @csrf
-
                                         <div class="tab-content no-padding">
                                             <div class="tab-pane fade show active" id="app">
                                                 <div class="form-group">
@@ -76,6 +75,10 @@
                                                 <div class="form-group">
                                                     <label>{{ __('APP_URL') }}</label>
                                                     <input type="text" name="APP_URL" value="{{ env('APP_URL') ?? '' }}" required class="form-control">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label>{{ __('EMAGIC_API_KEY') }}</label>
+                                                    <input type="text" name="EMAGIC_API_KEY" class="form-control" value="{{ env('EMAGIC_API_KEY') ?? '' }}">
                                                 </div>
                                                 <div class="row">
                                                     <div class="col-lg-12">
@@ -199,6 +202,8 @@
                                                 </div>
                                             </div>
 
+
+                                            
 
                                             <div class="tab-pane fade" id="redis_method">
                                                 <div class="form-group">

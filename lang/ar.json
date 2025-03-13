@@ -380,6 +380,7 @@
     "QUEUE_CONNECTION":"ابقاء الاتصال بالصف",
     "SESSION_DRIVER": "مشغل الجلسة",
     "SESSION_LIFETIME": "عمر الجلسة",
+    "EMAGIC_API_KEY": "مفتاح API EMAGIC",
     "REDIS_PORT": "منفذ الريدس",
     "REDIS_URL": "عنوان URL الريدس",
     "REDIS_PASSWORD": "كلمة مرور الريدس",

@@ -7,6 +7,7 @@ use App\Models\Business;
 use App\Helpers\HasUploader;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Models\PartyInvoiceData;
 
 class PartyController extends Controller
 {
@@ -16,7 +17,7 @@ class PartyController extends Controller
      */
     public function index()
     {
-        $data = Party::where('business_id', auth()->user()->business_id)->latest()->get();
+        $data = Party::with('invoice_data')->where('business_id', auth()->user()->business_id)->latest()->get();
 
         return response()->json([
             'message' => __('Data fetched successfully.'),
@@ -33,10 +34,30 @@ class PartyController extends Controller
             'phone' => 'required|max:20|unique:parties,phone',
         ]);
 
-        $data = Party::create($request->except('image') + [
+        $data = Party::create($request->except(['image', 'invoice_data']) + [
                     'image' => $request->image ? $this->upload($request, 'image') : NULL,
                     'business_id' => auth()->user()->business_id
                 ]);
+        
+        // Create invoice data if provided
+        if ($request->has('invoice_data')) {
+            $invoiceData = $request->invoice_data;
+            $data->invoice_data()->create([
+                'dtipoRuc' => $invoiceData['dtipoRuc'] ?? null,
+                'druc' => $invoiceData['druc'] ?? null,
+                'ddv' => $invoiceData['ddv'] ?? null,
+                'itipoRec' => $invoiceData['itipoRec'] ?? null,
+                'dnombRec' => $invoiceData['dnombRec'] ?? null,
+                'ddirecRec' => $invoiceData['ddirecRec'] ?? null,
+                'dcodUbi' => $invoiceData['dcodUbi'] ?? null,
+                'dcorreg' => $invoiceData['dcorreg'] ?? null,
+                'ddistr' => $invoiceData['ddistr'] ?? null,
+                'dprov' => $invoiceData['dprov'] ?? null,
+                'dcorElectRec' => $invoiceData['dcorElectRec'] ?? null,
+                'didExt' => $invoiceData['didExt'] ?? null,
+                'dpaisExt' => $invoiceData['dpaisExt'] ?? null
+            ]);
+        }
 
         return response()->json([
             'message' => __('Data saved successfully.'),
@@ -81,9 +102,32 @@ class PartyController extends Controller
             'phone' => 'required|max:20|unique:parties,phone,' . $party->id,
         ]);
 
-        $party = $party->update($request->except('image') + [
+        $party->update($request->except(['image', 'invoice_data']) + [
                     'image' => $request->image ? $this->upload($request, 'image', $party->image) : $party->image,
                 ]);
+        
+        // Update or create invoice data if provided
+        if ($request->has('invoice_data')) {
+            $invoiceData = $request->invoice_data;
+            $party->invoice_data()->updateOrCreate(
+                ['party_id' => $party->id],
+                [
+                    'dtipoRuc' => $invoiceData['dtipoRuc'] ?? null,
+                    'druc' => $invoiceData['druc'] ?? null,
+                    'ddv' => $invoiceData['ddv'] ?? null,
+                    'itipoRec' => $invoiceData['itipoRec'] ?? null,
+                    'dnombRec' => $invoiceData['dnombRec'] ?? null,
+                    'ddirecRec' => $invoiceData['ddirecRec'] ?? null,
+                    'dcodUbi' => $invoiceData['dcodUbi'] ?? null,
+                    'dcorreg' => $invoiceData['dcorreg'] ?? null,
+                    'ddistr' => $invoiceData['ddistr'] ?? null,
+                    'dprov' => $invoiceData['dprov'] ?? null,
+                    'dcorElectRec' => $invoiceData['dcorElectRec'] ?? null,
+                    'didExt' => $invoiceData['didExt'] ?? null,
+                    'dpaisExt' => $invoiceData['dpaisExt'] ?? null
+                ]
+            );
+        }
 
         return response()->json([
             'message' => __('Data saved successfully.'),

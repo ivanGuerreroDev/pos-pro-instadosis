@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Party extends Model
 {
@@ -45,4 +46,12 @@ class Party extends Model
     protected $casts = [
         'due' => 'double',
     ];
+    
+    /**
+     * Get the invoice data associated with the party.
+     */
+    public function invoice_data(): HasOne
+    {
+        return $this->hasOne(PartyInvoiceData::class);
+    }
 }

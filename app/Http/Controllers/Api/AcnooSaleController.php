@@ -7,6 +7,7 @@ use App\Models\Party;
 use App\Models\Product;
 use App\Models\Business;
 use App\Models\SaleDetails;
+use App\Services\BillingService;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 
@@ -34,7 +35,7 @@ class AcnooSaleController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request, BillingService $billingService)
     {
         $request->validate([
             'products' => 'required|array',
@@ -54,6 +55,29 @@ class AcnooSaleController extends Controller
 
         if ($request->party_id) {
             $party = Party::findOrFail($request->party_id);
+        }else{
+            if(empty($request->customer_name)){
+                return response()->json([
+                   'message' => __('Customer name is required.')
+                ], 400);
+            }
+            $party = [
+                'name' => $request->customer_name,
+                'phone' => $request->customer_phone,
+                'type' => 'customer',
+                'business_id' => auth()->user()->business_id,
+                'due' => 0,
+                'meta' => [
+                    'customer_phone' => $request->customer_phone
+                ],
+                'invoice_data' => [
+                    'dnombRec' => $request->customer_name,
+                    'itipoRec' => $request->customerType,
+                    'ddirecEm' => $request->customer_address,
+                    'dcorElectEmi' => $request->customer_email,
+                    'druc' => $request->customer_ruc,
+                ],
+            ];
         }
 
         if ($request->dueAmount) {
@@ -105,17 +129,21 @@ class AcnooSaleController extends Controller
                 sendMessage($party->phone, saleMessage($sale, $party, $business_name));
             }
         }
+        
+        // Send sale data to external billing service
+        $billingResult = $billingService->sendSaleToExternalBilling($sale, $party);
 
         return response()->json([
             'message' => __('Data saved successfully.'),
             'data' => $sale->load('user:id,name', 'party:id,name,email,phone,type', 'details', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'saleReturns.details'),
+            'billing' => $billingResult
         ]);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Sale $sale)
+    public function update(Request $request, Sale $sale, BillingService $billingService)
     {
         $request->validate([
             'products' => 'required|array',
@@ -191,10 +219,14 @@ class AcnooSaleController extends Controller
                 'customer_phone' => $request->customer_phone
             ],
         ]);
+        
+        // Send updated sale data to external billing service
+        $billingResult = $billingService->sendSaleToExternalBilling($sale);
 
         return response()->json([
             'message' => __('Data saved successfully.'),
             'data' => $sale->load('user:id,name', 'party:id,name,email,phone,type', 'details', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'saleReturns.details'),
+            'billing' => $billingResult
         ]);
     }
 

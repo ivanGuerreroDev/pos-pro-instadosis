@@ -382,6 +382,7 @@
     "QUEUE_CONNECTION": "Conexión de Cola",
     "SESSION_DRIVER": "Controlador de Sesión",
     "SESSION_LIFETIME": "Tiempo de Vida de la Sesión",
+    "EMAGIC_API_KEY": "API Key Emagic",
     "REDIS_PORT": "Puerto REDIS",
     "REDIS_URL": "URL de REDIS",
     "REDIS_PASSWORD": "Contraseña de REDIS",

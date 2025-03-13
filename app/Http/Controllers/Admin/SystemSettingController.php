@@ -40,6 +40,7 @@ APP_ENV=local
 APP_KEY=" . env('APP_KEY') . "
 APP_DEBUG=" . $request->APP_DEBUG . "
 APP_URL=" . url('/') . "
+EMAGIC_API_KEY=". env('EMAGIC_API_KEY') . "
 SITE_KEY=" . env('SITE_KEY') . "
 AUTHORIZED_KEY=" . env('AUTHORIZED_KEY') . "
 
@@ -91,6 +92,7 @@ PUSHER_APP_CLUSTER=" . $request->PUSHER_APP_CLUSTER . "
 PUSHER_SCHEME=https
 MIX_PUSHER_APP_KEY=" . '${PUSHER_APP_KEY}' . "
 MIX_PUSHER_APP_CLUSTER=" . '${PUSHER_APP_CLUSTER}' . "
+
 
 REDIS_HOST=" . $request->REDIS_HOST . "
 REDIS_PORT=" . $request->REDIS_PORT . "
