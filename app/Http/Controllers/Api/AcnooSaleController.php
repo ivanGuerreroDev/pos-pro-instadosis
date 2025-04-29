@@ -129,9 +129,10 @@ class AcnooSaleController extends Controller
                 sendMessage($party->phone, saleMessage($sale, $party, $business_name));
             }
         }
-        
+         
         // Send sale data to external billing service
         $billingResult = $billingService->sendSaleToExternalBilling($sale, $party);
+
 
         return response()->json([
             'message' => __('Data saved successfully.'),
@@ -140,6 +141,25 @@ class AcnooSaleController extends Controller
         ]);
     }
 
+    /**
+     * get pdf file
+     */
+
+    public function getPdf(Request $request, BillingService $billingService)
+    {
+        $request->validate([
+            'sale_id' => 'required|exists:sales,id',
+        ]);
+
+        $pdfFile =$billingService->getBillingPdfFile($request->sale_id);
+        #pdf file response transform to base64 url
+        $base64 = base64_encode($pdfFile);
+        $data = 'data:application/pdf;base64,' . $base64;
+        return response()->json([
+            'message' => __('Data fetched successfully.'),
+            'data' => $data,
+        ]);
+    }
     /**
      * Update the specified resource in storage.
      */

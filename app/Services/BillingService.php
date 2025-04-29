@@ -18,7 +18,7 @@ class BillingService
     public function __construct()
     {   
         // The API URL should be set in the .env file
-        $this->apiUrl = env('BILLING_API_URL', 'https://api.facturacion.example.com');
+        $this->apiUrl = env('EMAGIC_API_URL', 'https://api.facturacion.example.com');
     }
 
     /**
@@ -35,7 +35,7 @@ class BillingService
             // Send data to external billing API with EMAGIC_API_KEY header
             $response = Http::withHeaders([
                 'Ocp-Apim-Subscription-Key' => env('EMAGIC_API_KEY')
-            ])->post($this->apiUrl, $jsonData);
+            ])->post($this->apiUrl."/facturar/v1.1/autorizar", $jsonData);
 
             // Debug log for API request and response
             Log::debug('Billing API Request', [
@@ -296,5 +296,51 @@ class BillingService
         }
         
         return $formattedData;
+    }
+
+    /**
+     * Get the Billing PDF url
+     * 
+     * @return string
+     */
+    public function getBillingPdfFile($saleId)
+    {
+        $sale = Sale::findOrFail($saleId);
+        $business = Business::findOrFail($sale->business_id);
+        $invoiceData = $business->invoice_data;
+        
+        // Get the dgi_invoice record
+        $dgiInvoice = DB::table('dgi_invoice')->where('sale_id', $saleId)->first();
+        
+        if ($dgiInvoice) {
+            #generate a jwt with header: {"typ":"JWT","alg":"HS256"}
+            $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
+            #payload: { "cufe": $dgiInvoice->dgi_invoice_id}
+            $payload = json_encode(['cufe' => $dgiInvoice->dgi_invoice_id]);
+            # sign with secret key
+            $signature = hash_hmac('sha256', $header . '.' . $payload, env('EMAGIC_JWT_SECRET'));
+
+            # create the jwt token
+            $jwt = base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature);
+            # create the url https://emagic-products.azure-api.net/$jwt/file-type/pdf?codigoPlantilla=005
+            $url = $this->apiUrl . '/facturador-repositorio/test/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
+            # add the header Ocp-Apim-Subscription-Key with value EMAGIC_API_KEY
+            $response = Http::withHeaders([
+                'Ocp-Apim-Subscription-Key' => env('EMAGIC_API_KEY')
+            ])->get($url);
+            # response is a pdf file
+            if ($response->successful()) {
+                return $response->body();
+            } else {
+                Log::error('Billing PDF Error', [
+                    'sale_id' => $saleId,
+                    'response' => $response->body(),
+                    'status' => $response->status()
+                ]);
+                return false;
+            }
+        }
+        
+        return null;
     }
 }
