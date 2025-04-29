@@ -313,29 +313,39 @@ class BillingService
         $dgiInvoice = DB::table('dgi_invoice')->where('sale_id', $saleId)->first();
         
         if ($dgiInvoice) {
-            #generate a jwt with header: {"typ":"JWT","alg":"HS256"}
+            // Función para codificar en base64url según estándar JWT
+            $base64url_encode = function ($data) {
+                return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+            };
+            
+            // Genera los componentes del JWT
             $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
-            #payload: { "cufe": $dgiInvoice->dgi_invoice_id}
             $payload = json_encode(['cufe' => $dgiInvoice->dgi_invoice_id]);
-            # sign with secret key
-            $signature = hash_hmac('sha256', $header . '.' . $payload, env('EMAGIC_JWT_SECRET'));
+            
+            // Codifica header y payload en base64url
+            $encoded_header = $base64url_encode($header);
+            $encoded_payload = $base64url_encode($payload);
+            
+            // Crea la firma usando el método correcto
+            $signature = hash_hmac('sha256', $encoded_header . '.' . $encoded_payload, env('EMAGIC_JWT_SECRET'), true);
+            $encoded_signature = $base64url_encode($signature);
+            
+            // Construye el JWT completo
+            $jwt = $encoded_header . '.' . $encoded_payload . '.' . $encoded_signature;
+            
             Log::debug('Billing PDF', [
                 'sale_id' => $saleId,
-                'header' => $header,
-                'payload' => $payload,
-                'signature' => $signature,
-                'jwt' => base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature),
-                'signatre_base64' => base64_encode($signature)
+                'jwt' => $jwt
             ]);
-            # create the jwt token enconde utf-8 format
-            $jwt = base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature);
-            # create the url https://emagic-products.azure-api.net/$jwt/file-type/pdf?codigoPlantilla=005
+            
+            // Crea la URL con el JWT
             $url = $this->apiUrl . '/facturador-repositorio/test/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
-            # add the header Ocp-Apim-Subscription-Key with value EMAGIC_API_KEY
+            
+            // Realiza la solicitud con el encabezado requerido
             $response = Http::withHeaders([
                 'Ocp-Apim-Subscription-Key' => env('EMAGIC_API_KEY')
             ])->get($url);
-            # response is a pdf file
+            
             if ($response->successful()) {
                 return $response->body();
             } else {
