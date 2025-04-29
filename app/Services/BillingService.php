@@ -323,11 +323,12 @@ class BillingService
                 'sale_id' => $saleId,
                 'header' => $header,
                 'payload' => $payload,
-                'signature' => $signature
+                'signature' => $signature,
+                'jwt' => base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature),
+                'signatre_base64' => base64_encode($signature)
             ]);
             # create the jwt token enconde utf-8 format
-            $jwt = $signature;
-            #$jwt = base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature);
+            $jwt = base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature);
             # create the url https://emagic-products.azure-api.net/$jwt/file-type/pdf?codigoPlantilla=005
             $url = $this->apiUrl . '/facturador-repositorio/test/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
             # add the header Ocp-Apim-Subscription-Key with value EMAGIC_API_KEY
