@@ -150,10 +150,29 @@ class AcnooSaleController extends Controller
             'sale_id' => 'required|exists:sales,id',
         ]);
 
-        $pdfFile =$billingService->getBillingPdfFile($request->sale_id);
-        #pdf file response transform to base64 url
+        $pdfFile = $billingService->getBillingPdfFile($request->sale_id);
+        
+        // Validación del contenido del PDF
+        if (!$pdfFile || empty($pdfFile)) {
+            return response()->json([
+                'message' => __('PDF file could not be generated.'),
+                'data' => null,
+            ], 404);
+        }
+        
+        // Codificación a base64
         $base64 = base64_encode($pdfFile);
+        
+        // Verificar que la codificación se realizó correctamente
+        if (empty($base64)) {
+            return response()->json([
+                'message' => __('Error encoding PDF file.'),
+                'data' => null,
+            ], 500);
+        }
+        
         $data = 'data:application/pdf;base64,' . $base64;
+        
         return response()->json([
             'message' => __('Data fetched successfully.'),
             'data' => $data,
