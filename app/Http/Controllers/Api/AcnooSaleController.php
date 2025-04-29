@@ -142,9 +142,8 @@ class AcnooSaleController extends Controller
     }
 
     /**
-     * get pdf file
+     * Post pdf file
      */
-
     public function getPdf(Request $request, BillingService $billingService)
     {
         $request->validate([

@@ -29,7 +29,7 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('business', Api\BusinessController::class)->only('index', 'store', 'update');
         Route::apiResource('purchase', Api\PurchaseController::class)->except('show');
         Route::apiResource('sales', Api\AcnooSaleController::class)->except('show');
-        Route::apiResource('dgi-pdf', Api\AcnooSaleController::class)->only('getPdf');
+        Route::post('dgi-pdf', Api\AcnooSaleController::class)->only('getPdf');
         Route::apiResource('sales-return', Api\SaleReturnController::class)->only('index', 'store', 'show');
         Route::apiResource('purchases-return', Api\PurchaseReturnController::class)->only('index', 'store', 'show');
         Route::apiResource('invoices', Api\AcnooInvoiceController::class)->only('index');
