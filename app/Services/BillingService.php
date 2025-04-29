@@ -319,9 +319,15 @@ class BillingService
             $payload = json_encode(['cufe' => $dgiInvoice->dgi_invoice_id]);
             # sign with secret key
             $signature = hash_hmac('sha256', $header . '.' . $payload, env('EMAGIC_JWT_SECRET'));
-
-            # create the jwt token
-            $jwt = base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature);
+            Log::debug('Billing PDF', [
+                'sale_id' => $saleId,
+                'header' => $header,
+                'payload' => $payload,
+                'signature' => $signature
+            ]);
+            # create the jwt token enconde utf-8 format
+            $jwt = $signature;
+            #$jwt = base64_encode($header) . '.' . base64_encode($payload) . '.' . base64_encode($signature);
             # create the url https://emagic-products.azure-api.net/$jwt/file-type/pdf?codigoPlantilla=005
             $url = $this->apiUrl . '/facturador-repositorio/test/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
             # add the header Ocp-Apim-Subscription-Key with value EMAGIC_API_KEY
