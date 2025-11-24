@@ -1,0 +1,66 @@
+version: '3.8'
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: pos-pro-instadosis-app
+        container_name: pos-pro-instadosis-app
+        restart: unless-stopped
+        working_dir: /var/www
+        volumes:
+            - ./:/var/www
+            - /var/www/vendor
+            - /var/www/node_modules
+        networks:
+            - pos-network
+        depends_on:
+            - db
+        ports:
+            - "8000:8000"
+            - "5173:5173"
+        environment:
+            DB_HOST: db
+            DB_PORT: 3306
+            DB_DATABASE: ${DB_DATABASE}
+            DB_USERNAME: ${DB_USERNAME}
+            DB_PASSWORD: ${DB_PASSWORD}
+
+    db:
+        image: mysql:8.0
+        container_name: pos-pro-instadosis-db
+        restart: unless-stopped
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE}
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_USER: ${DB_USERNAME}
+            SERVICE_TAGS: dev
+            SERVICE_NAME: mysql
+        volumes:
+            - pos_db_data:/var/lib/mysql
+        networks:
+            - pos-network
+        ports:
+            - "3306:3306"
+
+    nginx:
+        image: nginx:alpine
+        container_name: pos-pro-instadosis-nginx
+        restart: unless-stopped
+        ports:
+            - "8080:80"
+        volumes:
+            - ./:/var/www
+            - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+        networks:
+            - pos-network
+        depends_on:
+            - app
+
+networks:
+    pos-network:
+        driver: bridge
+
+volumes:
+    pos_db_data:

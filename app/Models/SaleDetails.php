@@ -21,6 +21,10 @@ class SaleDetails extends Model
         'price',
         'lossProfit',
         'quantities',
+        'subtotal',
+        'tax_rate',
+        'tax_amount',
+        'total',
     ];
 
     /**
@@ -33,5 +37,10 @@ class SaleDetails extends Model
     public function product() : BelongsTo
     {
         return $this->belongsTo(Product::class, 'product_id');
+    }
+
+    public function batchSaleDetails()
+    {
+        return $this->hasMany(BatchSaleDetail::class, 'sale_detail_id');
     }
 }

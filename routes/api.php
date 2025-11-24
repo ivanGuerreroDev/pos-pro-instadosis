@@ -25,6 +25,31 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('brands', Api\AcnooBrandController::class)->except('show');
         Route::apiResource('categories', Api\AcnooCategoryController::class)->except('show');
         Route::apiResource('products', Api\AcnooProductController::class)->except('show');
+        
+        // Product Batch Management Routes
+        Route::prefix('product-batches')->group(function () {
+            Route::get('/', [Api\ProductBatchController::class, 'index']);
+            Route::post('/', [Api\ProductBatchController::class, 'store']);
+            // Specific routes first (before parameterized routes)
+            Route::get('/product/{productId}', [Api\ProductBatchController::class, 'productBatches']);
+            Route::get('/product/{productId}/available', [Api\ProductBatchController::class, 'availableForSale']);
+            // Parameterized routes after
+            Route::get('/{productBatch}', [Api\ProductBatchController::class, 'show']);
+            Route::put('/{productBatch}', [Api\ProductBatchController::class, 'update']);
+            Route::delete('/{productBatch}', [Api\ProductBatchController::class, 'destroy']);
+            Route::post('/{productBatch}/discard', [Api\ProductBatchController::class, 'discard']);
+            Route::post('/{productBatch}/adjust', [Api\ProductBatchController::class, 'adjust']);
+        });
+
+        // Expired Batch Notifications Routes
+        Route::prefix('batch-notifications')->group(function () {
+            Route::get('/', [Api\ExpiredBatchNotificationController::class, 'index']);
+            Route::get('/unread', [Api\ExpiredBatchNotificationController::class, 'unread']);
+            Route::post('/{notification}/read', [Api\ExpiredBatchNotificationController::class, 'markAsRead']);
+            Route::delete('/{notification}', [Api\ExpiredBatchNotificationController::class, 'dismiss']);
+            Route::get('/stats', [Api\ExpiredBatchNotificationController::class, 'stats']);
+        });
+        
         Route::apiResource('business-categories', Api\BusinessCategoryController::class)->only('index');
         Route::apiResource('business', Api\BusinessController::class)->only('index', 'store', 'update');
         Route::apiResource('purchase', Api\PurchaseController::class)->except('show');
