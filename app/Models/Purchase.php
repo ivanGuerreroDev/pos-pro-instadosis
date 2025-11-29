@@ -51,6 +51,11 @@ class Purchase extends Model
         return $this->hasMany(PurchaseReturn::class, 'purchase_id');
     }
 
+    public function productBatches()
+    {
+        return $this->hasMany(ProductBatch::class, 'purchase_id');
+    }
+
     public function getHasReturnAttribute()
     {
         return $this->purchaseReturns()->exists();

@@ -18,7 +18,7 @@ class PurchaseController extends Controller
      */
     public function index()
     {
-        $data = Purchase::with('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'details.productBatches:id,purchase_detail_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details')
+        $data = Purchase::with('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details')
                 ->when(request('returned-purchase') == "true", function ($query) {
                     $query->whereHas('purchaseReturns');
                 })
@@ -62,10 +62,19 @@ class PurchaseController extends Controller
 
         $purchaseDetails = [];
         foreach ($request->products as $key => $product_data) {
+            $product = Product::findOrFail($product_data['product_id']);
+            
+            // If product is tracked by batches, calculate quantity from batches
+            if ($product->track_by_batches && isset($product_data['batches']) && is_array($product_data['batches'])) {
+                $totalQuantity = array_sum(array_column($product_data['batches'], 'quantity'));
+            } else {
+                $totalQuantity = $product_data['quantities'] ?? 0;
+            }
+            
             $purchaseDetails[$key] = [
                 'purchase_id' => $purchase->id,
                 'product_id' => $product_data['product_id'],
-                'quantities' => $product_data['quantities'] ?? 0,
+                'quantities' => $totalQuantity,
                 'productSalePrice' => $product_data['productSalePrice'] ?? 0,
                 'productDealerPrice' => $product_data['productDealerPrice'] ?? 0,
                 'productPurchasePrice' => $product_data['productPurchasePrice'] ?? 0,
@@ -80,20 +89,39 @@ class PurchaseController extends Controller
         foreach ($request->products as $key => $product_data) {
             $product = Product::findOrFail($product_data['product_id']);
             
-            // If product is tracked by batches, create a batch
+            // If product is tracked by batches, create batches
             if ($product->track_by_batches) {
-                $batchService->createBatch([
-                    'product_id' => $product->id,
-                    'business_id' => auth()->user()->business_id,
-                    'batch_number' => $product_data['batch_number'] ?? null,
-                    'quantity' => $product_data['quantities'] ?? 0,
-                    'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
-                    'manufacture_date' => $product_data['manufacture_date'] ?? null,
-                    'expiry_date' => $product_data['expiry_date'] ?? null,
-                    'purchase_id' => $purchase->id,
-                    'reference_type' => 'Purchase',
-                    'reference_id' => $purchase->id,
-                ]);
+                if (isset($product_data['batches']) && is_array($product_data['batches'])) {
+                    // Multiple batches provided
+                    foreach ($product_data['batches'] as $batchData) {
+                        $batchService->createBatch([
+                            'product_id' => $product->id,
+                            'business_id' => auth()->user()->business_id,
+                            'batch_number' => $batchData['batch_number'] ?? null,
+                            'quantity' => $batchData['quantity'] ?? 0,
+                            'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
+                            'manufacture_date' => $batchData['manufacture_date'] ?? null,
+                            'expiry_date' => $batchData['expiry_date'] ?? null,
+                            'purchase_id' => $purchase->id,
+                            'reference_type' => 'Purchase',
+                            'reference_id' => $purchase->id,
+                        ]);
+                    }
+                } else {
+                    // Single batch (backward compatibility)
+                    $batchService->createBatch([
+                        'product_id' => $product->id,
+                        'business_id' => auth()->user()->business_id,
+                        'batch_number' => $product_data['batch_number'] ?? null,
+                        'quantity' => $product_data['quantities'] ?? 0,
+                        'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
+                        'manufacture_date' => $product_data['manufacture_date'] ?? null,
+                        'expiry_date' => $product_data['expiry_date'] ?? null,
+                        'purchase_id' => $purchase->id,
+                        'reference_type' => 'Purchase',
+                        'reference_id' => $purchase->id,
+                    ]);
+                }
             } else {
                 // Update stock directly for non-batch products
                 $product->update([
@@ -118,7 +146,7 @@ class PurchaseController extends Controller
 
         return response()->json([
             'message' => __('Data saved successfully.'),
-            'data' => $purchase->load('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'details.productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details'),
+            'data' => $purchase->load('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details'),
         ]);
     }
 
@@ -204,7 +232,7 @@ class PurchaseController extends Controller
 
         return response()->json([
             'message' => __('Data saved successfully.'),
-            'data' => $purchase->load('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'details.productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details'),
+            'data' => $purchase->load('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details'),
         ]);
     }
 

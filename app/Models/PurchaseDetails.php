@@ -38,9 +38,19 @@ class PurchaseDetails extends Model
         return $this->belongsTo(Product::class, 'product_id');
     }
 
-    public function productBatches() : HasMany
+    public function purchase() : BelongsTo
     {
-        return $this->hasMany(ProductBatch::class, 'purchase_id', 'purchase_id')
-            ->whereColumn('product_batches.product_id', 'purchase_details.product_id');
+        return $this->belongsTo(Purchase::class, 'purchase_id');
+    }
+
+    /**
+     * Get the product batches for this purchase detail.
+     * This is a custom accessor since we need to filter by both purchase_id and product_id
+     */
+    public function getProductBatchesAttribute()
+    {
+        return ProductBatch::where('purchase_id', $this->purchase_id)
+            ->where('product_id', $this->product_id)
+            ->get();
     }
 }
