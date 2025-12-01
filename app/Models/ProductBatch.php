@@ -37,8 +37,8 @@ class ProductBatch extends Model
      * @var array
      */
     protected $casts = [
-        'manufacture_date' => 'date',
-        'expiry_date' => 'date',
+        'manufacture_date' => 'date:Y-m-d',
+        'expiry_date' => 'date:Y-m-d',
         'purchase_price' => 'double',
     ];
 
