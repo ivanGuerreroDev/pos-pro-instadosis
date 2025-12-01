@@ -25,12 +25,18 @@ class BatchService
             // Set remaining quantity equal to quantity initially
             $data['remaining_quantity'] = $data['quantity'];
 
-            // Format dates to avoid timezone issues
+            // Format dates to avoid timezone issues - extract only the date part
             if (!empty($data['manufacture_date'])) {
-                $data['manufacture_date'] = \Carbon\Carbon::parse($data['manufacture_date'])->format('Y-m-d');
+                // Extract only date part (YYYY-MM-DD) if it's a valid date string
+                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['manufacture_date'], $matches)) {
+                    $data['manufacture_date'] = $matches[1];
+                }
             }
             if (!empty($data['expiry_date'])) {
-                $data['expiry_date'] = \Carbon\Carbon::parse($data['expiry_date'])->format('Y-m-d');
+                // Extract only date part (YYYY-MM-DD) if it's a valid date string
+                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['expiry_date'], $matches)) {
+                    $data['expiry_date'] = $matches[1];
+                }
             }
 
             // Create batch
