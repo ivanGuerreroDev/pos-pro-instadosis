@@ -25,6 +25,14 @@ class BatchService
             // Set remaining quantity equal to quantity initially
             $data['remaining_quantity'] = $data['quantity'];
 
+            // Format dates to avoid timezone issues
+            if (!empty($data['manufacture_date'])) {
+                $data['manufacture_date'] = \Carbon\Carbon::parse($data['manufacture_date'])->format('Y-m-d');
+            }
+            if (!empty($data['expiry_date'])) {
+                $data['expiry_date'] = \Carbon\Carbon::parse($data['expiry_date'])->format('Y-m-d');
+            }
+
             // Create batch
             $batch = ProductBatch::create($data);
 
