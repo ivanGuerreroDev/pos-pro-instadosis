@@ -52,4 +52,28 @@ class BatchSaleDetail extends Model
     {
         return $query->where('batch_id', $batchId);
     }
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // When a batch sale detail is created, decrement the batch stock
+        static::created(function ($batchSaleDetail) {
+            $batch = $batchSaleDetail->batch;
+            if ($batch) {
+                $batch->decrement('remaining_quantity', $batchSaleDetail->quantity);
+            }
+        });
+
+        // When a batch sale detail is deleted, increment the batch stock back
+        static::deleted(function ($batchSaleDetail) {
+            $batch = $batchSaleDetail->batch;
+            if ($batch) {
+                $batch->increment('remaining_quantity', $batchSaleDetail->quantity);
+            }
+        });
+    }
 }

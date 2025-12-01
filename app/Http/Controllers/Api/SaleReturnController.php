@@ -73,7 +73,32 @@ class SaleReturnController extends Controller
             foreach ($request->sale_detail_id as $key => $detail_id) {
 
                 $sale_detail = SaleDetails::findOrFail($detail_id);
-                Product::findOrFail($sale_detail->product_id)->increment('productStock', $request->return_qty[$key]);
+                $product = Product::findOrFail($sale_detail->product_id);
+
+                // Handle stock return based on product type
+                if ($product->track_by_batches) {
+                    // For batch-tracked products, return stock to the batches
+                    $batchSaleDetails = $sale_detail->batchSaleDetails()
+                        ->with('batch')
+                        ->get();
+
+                    $remainingReturnQty = $request->return_qty[$key];
+                    
+                    // Return stock proportionally to the batches used in the sale
+                    foreach ($batchSaleDetails as $batchSaleDetail) {
+                        if ($remainingReturnQty <= 0) break;
+                        
+                        $returnToBatch = min($batchSaleDetail->quantity, $remainingReturnQty);
+                        
+                        // Increment the batch remaining quantity
+                        $batchSaleDetail->batch->increment('remaining_quantity', $returnToBatch);
+                        
+                        $remainingReturnQty -= $returnToBatch;
+                    }
+                } else {
+                    // For traditional products, increment productStock
+                    $product->increment('productStock', $request->return_qty[$key]);
+                }
 
                 $sale_detail->update([
                     'lossProfit' => $request->lossProfit[$key],
