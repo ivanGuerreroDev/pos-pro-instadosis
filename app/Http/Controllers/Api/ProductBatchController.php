@@ -147,11 +147,9 @@ class ProductBatchController extends Controller
             return response()->json(['message' => __('Unauthorized')], 403);
         }
 
-        // Prevent deletion if batch has remaining stock
+        // If batch has remaining stock, automatically discard it before deletion
         if ($productBatch->remaining_quantity > 0) {
-            return response()->json([
-                'message' => __('Cannot delete batch with remaining stock. Please adjust or discard first.'),
-            ], 400);
+            $this->batchService->discardBatch($productBatch, 'Automatic discard before deletion');
         }
 
         $productBatch->delete();
