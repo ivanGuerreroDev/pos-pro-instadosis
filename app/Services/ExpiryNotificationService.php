@@ -4,7 +4,10 @@ namespace App\Services;
 
 use App\Models\ProductBatch;
 use App\Models\ExpiredBatchNotification;
+use App\Models\User;
+use App\Mail\BatchExpiryNotification;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Mail;
 
 class ExpiryNotificationService
 {
@@ -106,6 +109,63 @@ class ExpiryNotificationService
             $type,
             $daysUntilExpiry
         );
+
+        // Send email notification
+        $this->sendEmailNotification($batch, $type, $daysUntilExpiry);
+    }
+
+    /**
+     * Send email notification to business users.
+     */
+    private function sendEmailNotification(
+        ProductBatch $batch,
+        string $type,
+        int $daysUntilExpiry
+    ): void {
+        // Check if mail is configured
+        if (!env('MAIL_USERNAME')) {
+            return;
+        }
+
+        // Get business users with admin or manager roles
+        $users = User::where('business_id', $batch->business_id)
+            ->whereIn('role', ['admin', 'manager', 'owner'])
+            ->whereNotNull('email')
+            ->get();
+
+        if ($users->isEmpty()) {
+            return;
+        }
+
+        // Get business name
+        $businessName = $batch->business->companyName ?? '';
+
+        // Load product relationship if not loaded
+        $batch->load('product');
+
+        foreach ($users as $user) {
+            try {
+                $mailable = new BatchExpiryNotification(
+                    $batch,
+                    $type,
+                    $daysUntilExpiry,
+                    $businessName
+                );
+
+                if (env('QUEUE_MAIL')) {
+                    Mail::to($user->email)->queue($mailable);
+                } else {
+                    Mail::to($user->email)->send($mailable);
+                }
+            } catch (\Exception $e) {
+                // Log error but don't stop the process
+                \Log::error('Failed to send batch expiry notification email', [
+                    'user_id' => $user->id,
+                    'batch_id' => $batch->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
     }
 
     /**
