@@ -15,9 +15,10 @@ class ExpiryNotificationService
     {
         $results = [
             'expired' => 0,
-            'near_expiry_7' => 0,
             'near_expiry_15' => 0,
             'near_expiry_30' => 0,
+            'near_expiry_60' => 0,
+            'near_expiry_90' => 0,
             'out_of_stock' => 0,
             'updated_status' => 0,
         ];
@@ -56,14 +57,7 @@ class ExpiryNotificationService
             $daysUntilExpiry = $batch->getDaysUntilExpiry();
 
             if ($daysUntilExpiry !== null) {
-                if ($daysUntilExpiry <= 7 && $daysUntilExpiry > 0) {
-                    $this->createOrUpdateNotification(
-                        $batch,
-                        'near_expiry',
-                        $daysUntilExpiry
-                    );
-                    $results['near_expiry_7']++;
-                } elseif ($daysUntilExpiry <= 15 && $daysUntilExpiry > 7) {
+                if ($daysUntilExpiry <= 15 && $daysUntilExpiry > 0) {
                     $this->createOrUpdateNotification(
                         $batch,
                         'near_expiry',
@@ -77,6 +71,20 @@ class ExpiryNotificationService
                         $daysUntilExpiry
                     );
                     $results['near_expiry_30']++;
+                } elseif ($daysUntilExpiry <= 60 && $daysUntilExpiry > 30) {
+                    $this->createOrUpdateNotification(
+                        $batch,
+                        'near_expiry',
+                        $daysUntilExpiry
+                    );
+                    $results['near_expiry_60']++;
+                } elseif ($daysUntilExpiry <= 90 && $daysUntilExpiry > 60) {
+                    $this->createOrUpdateNotification(
+                        $batch,
+                        'near_expiry',
+                        $daysUntilExpiry
+                    );
+                    $results['near_expiry_90']++;
                 }
             }
         }
@@ -177,15 +185,23 @@ class ExpiryNotificationService
                 ->count(),
             'critical' => ExpiredBatchNotification::where('business_id', $businessId)
                 ->active()
-                ->where('days_until_expiry', '<=', 7)
+                ->where('days_until_expiry', '<=', 15)
+                ->where('notification_type', 'near_expiry')
                 ->count(),
-            'warning' => ExpiredBatchNotification::where('business_id', $businessId)
+            'warning_30' => ExpiredBatchNotification::where('business_id', $businessId)
                 ->active()
-                ->whereBetween('days_until_expiry', [8, 15])
+                ->whereBetween('days_until_expiry', [16, 30])
+                ->where('notification_type', 'near_expiry')
+                ->count(),
+            'warning_60' => ExpiredBatchNotification::where('business_id', $businessId)
+                ->active()
+                ->whereBetween('days_until_expiry', [31, 60])
+                ->where('notification_type', 'near_expiry')
                 ->count(),
             'info' => ExpiredBatchNotification::where('business_id', $businessId)
                 ->active()
-                ->whereBetween('days_until_expiry', [16, 30])
+                ->whereBetween('days_until_expiry', [61, 90])
+                ->where('notification_type', 'near_expiry')
                 ->count(),
             'expired' => ExpiredBatchNotification::where('business_id', $businessId)
                 ->active()

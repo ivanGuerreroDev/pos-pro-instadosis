@@ -47,9 +47,10 @@ class CheckExpiringBatches extends Command
         $this->line('');
         $this->info('Results:');
         $this->line("  Expired batches: {$results['expired']}");
-        $this->line("  Near expiry (7 days): {$results['near_expiry_7']}");
         $this->line("  Near expiry (15 days): {$results['near_expiry_15']}");
-        $this->line("  Near expiry (30 days): {$results['near_expiry_30']}");
+        $this->line("  Near expiry (1 month/30 days): {$results['near_expiry_30']}");
+        $this->line("  Near expiry (2 months/60 days): {$results['near_expiry_60']}");
+        $this->line("  Near expiry (3 months/90 days): {$results['near_expiry_90']}");
         $this->line("  Out of stock batches: {$results['out_of_stock']}");
         $this->line("  Batch statuses updated: {$results['updated_status']}");
 

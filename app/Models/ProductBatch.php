@@ -116,8 +116,16 @@ class ProductBatch extends Model
         }
         
         $days = $this->getDaysUntilExpiry();
-        if ($days !== null && $days <= 30 && $days > 0) {
-            return "Vence en $days días";
+        if ($days !== null && $days <= 90 && $days > 0) {
+            if ($days <= 15) {
+                return "Vence en $days días - CRÍTICO";
+            } elseif ($days <= 30) {
+                return "Vence en $days días (1 mes)";
+            } elseif ($days <= 60) {
+                return "Vence en $days días (2 meses)";
+            } else {
+                return "Vence en $days días (3 meses)";
+            }
         }
         
         return '';
@@ -258,7 +266,7 @@ class ProductBatch extends Model
     /**
      * Check if the batch is near expiry.
      */
-    public function isNearExpiry($days = 30): bool
+    public function isNearExpiry($days = 90): bool
     {
         if (!$this->expiry_date) {
             return false;
