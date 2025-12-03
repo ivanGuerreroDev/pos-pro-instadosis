@@ -43,6 +43,14 @@ class ProductBatchController extends Controller
             $query->nearExpiry($request->near_expiry);
         }
 
+        // Filter out of stock (optional)
+        if ($request->has('out_of_stock') && $request->out_of_stock) {
+            $query->where('remaining_quantity', '<=', 0);
+        } elseif ($request->has('with_stock') && $request->with_stock) {
+            $query->where('remaining_quantity', '>', 0);
+        }
+        // Por defecto, muestra todos los lotes incluyendo los en 0
+
         // Order by expiry date
         $query->orderBy('expiry_date', 'asc');
 

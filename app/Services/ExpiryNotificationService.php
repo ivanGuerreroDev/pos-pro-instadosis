@@ -18,6 +18,7 @@ class ExpiryNotificationService
             'near_expiry_7' => 0,
             'near_expiry_15' => 0,
             'near_expiry_30' => 0,
+            'out_of_stock' => 0,
             'updated_status' => 0,
         ];
 
@@ -27,6 +28,17 @@ class ExpiryNotificationService
             ->get();
 
         foreach ($batches as $batch) {
+            // Check for out of stock batches
+            if ($batch->remaining_quantity <= 0) {
+                $this->createOrUpdateNotification(
+                    $batch,
+                    'out_of_stock',
+                    0
+                );
+                $results['out_of_stock']++;
+                continue;
+            }
+
             // Update batch status if expired
             if ($batch->isExpired()) {
                 $batch->update(['status' => 'expired']);
@@ -137,19 +149,19 @@ class ExpiryNotificationService
     }
 
     /**
-     * Clean up old notifications for discarded or sold out batches.
+     * Clean up old notifications for discarded batches only.
+     * Batches with zero quantity keep their notifications.
      */
     public function cleanupOldNotifications(): int
     {
-        // Delete notifications for discarded batches
+        // Delete notifications for discarded batches only
         $discardedBatches = ProductBatch::where('status', 'discarded')->pluck('id');
         $deletedDiscarded = ExpiredBatchNotification::whereIn('batch_id', $discardedBatches)->delete();
 
-        // Delete notifications for batches with zero remaining quantity
-        $emptyBatches = ProductBatch::where('remaining_quantity', 0)->pluck('id');
-        $deletedEmpty = ExpiredBatchNotification::whereIn('batch_id', $emptyBatches)->delete();
+        // Ya NO eliminamos notificaciones de lotes con cantidad 0
+        // Esos lotes mantienen sus notificaciones de tipo 'out_of_stock'
 
-        return $deletedDiscarded + $deletedEmpty;
+        return $deletedDiscarded;
     }
 
     /**
@@ -178,6 +190,10 @@ class ExpiryNotificationService
             'expired' => ExpiredBatchNotification::where('business_id', $businessId)
                 ->active()
                 ->ofType('expired')
+                ->count(),
+            'out_of_stock' => ExpiredBatchNotification::where('business_id', $businessId)
+                ->active()
+                ->ofType('out_of_stock')
                 ->count(),
         ];
     }

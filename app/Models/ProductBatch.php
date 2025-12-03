@@ -287,7 +287,19 @@ class ProductBatch extends Model
         }
 
         $this->remaining_quantity -= $quantity;
-        return $this->save();
+        $saved = $this->save();
+
+        // Create notification if batch is now out of stock
+        if ($saved && $this->remaining_quantity <= 0) {
+            ExpiredBatchNotification::createOrUpdate(
+                $this->id,
+                $this->business_id,
+                'out_of_stock',
+                0
+            );
+        }
+
+        return $saved;
     }
 
     /**
