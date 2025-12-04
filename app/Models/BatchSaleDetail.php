@@ -64,7 +64,7 @@ class BatchSaleDetail extends Model
         static::created(function ($batchSaleDetail) {
             $batch = $batchSaleDetail->batch;
             if ($batch) {
-                $batch->decrement('remaining_quantity', $batchSaleDetail->quantity);
+                $batch->decreaseQuantity($batchSaleDetail->quantity);
             }
         });
 
@@ -72,7 +72,7 @@ class BatchSaleDetail extends Model
         static::deleted(function ($batchSaleDetail) {
             $batch = $batchSaleDetail->batch;
             if ($batch) {
-                $batch->increment('remaining_quantity', $batchSaleDetail->quantity);
+                $batch->increaseQuantity($batchSaleDetail->quantity);
             }
         });
     }
