@@ -10,6 +10,86 @@ use Illuminate\Support\Facades\DB;
 class BatchService
 {
     /**
+     * Add to existing batch or create new one.
+     * If batch_number exists for the product, adds quantity to it.
+     * Otherwise creates a new batch.
+     */
+    public function addOrCreateBatch(array $data): ProductBatch
+    {
+        DB::beginTransaction();
+        
+        try {
+            // Format dates to avoid timezone issues
+            if (!empty($data['manufacture_date'])) {
+                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['manufacture_date'], $matches)) {
+                    $data['manufacture_date'] = $matches[1];
+                }
+            }
+            if (!empty($data['expiry_date'])) {
+                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['expiry_date'], $matches)) {
+                    $data['expiry_date'] = $matches[1];
+                }
+            }
+
+            // Generate batch number if not provided
+            if (empty($data['batch_number'])) {
+                $data['batch_number'] = $this->generateBatchNumber($data['product_id']);
+            }
+
+            // Try to find existing batch by batch_number and product_id (regardless of status)
+            // Note: The unique constraint is on (product_id, batch_number), not including business_id
+            $existingBatch = ProductBatch::where('product_id', $data['product_id'])
+                ->where('batch_number', $data['batch_number'])
+                ->first();
+
+            if ($existingBatch) {
+                // Add to existing batch
+                $existingBatch->quantity += $data['quantity'];
+                $existingBatch->remaining_quantity += $data['quantity'];
+                
+                // Update dates if provided
+                if (!empty($data['manufacture_date'])) {
+                    $existingBatch->manufacture_date = $data['manufacture_date'];
+                }
+                if (!empty($data['expiry_date'])) {
+                    $existingBatch->expiry_date = $data['expiry_date'];
+                }
+                
+                // Update purchase price if provided
+                if (isset($data['purchase_price'])) {
+                    $existingBatch->purchase_price = $data['purchase_price'];
+                }
+                
+                // Reactivate batch if it was expired or discarded
+                if ($existingBatch->status !== 'active') {
+                    $existingBatch->status = 'active';
+                }
+                
+                $existingBatch->save();
+
+                // Record transaction
+                BatchTransaction::record(
+                    $existingBatch->id,
+                    'purchase',
+                    $data['quantity'],
+                    $data['reference_type'] ?? null,
+                    $data['reference_id'] ?? null,
+                    'Added to existing batch'
+                );
+
+                DB::commit();
+                return $existingBatch;
+            } else {
+                // Create new batch
+                return $this->createBatch($data);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Create a new batch for a product.
      */
     public function createBatch(array $data): ProductBatch

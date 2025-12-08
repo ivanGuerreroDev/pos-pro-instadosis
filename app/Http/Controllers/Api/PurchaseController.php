@@ -89,12 +89,12 @@ class PurchaseController extends Controller
         foreach ($request->products as $key => $product_data) {
             $product = Product::findOrFail($product_data['product_id']);
             
-            // If product is tracked by batches, create batches
+            // If product is tracked by batches, create or update batches
             if ($product->track_by_batches) {
                 if (isset($product_data['batches']) && is_array($product_data['batches'])) {
                     // Multiple batches provided
                     foreach ($product_data['batches'] as $batchData) {
-                        $batchService->createBatch([
+                        $batchService->addOrCreateBatch([
                             'product_id' => $product->id,
                             'business_id' => auth()->user()->business_id,
                             'batch_number' => $batchData['batch_number'] ?? null,
@@ -109,7 +109,7 @@ class PurchaseController extends Controller
                     }
                 } else {
                     // Single batch (backward compatibility)
-                    $batchService->createBatch([
+                    $batchService->addOrCreateBatch([
                         'product_id' => $product->id,
                         'business_id' => auth()->user()->business_id,
                         'batch_number' => $product_data['batch_number'] ?? null,
