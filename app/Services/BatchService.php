@@ -6,6 +6,7 @@ use App\Models\ProductBatch;
 use App\Models\BatchTransaction;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BatchService
 {
@@ -16,17 +17,22 @@ class BatchService
      */
     public function addOrCreateBatch(array $data): ProductBatch
     {
-        DB::beginTransaction();
+        // Check if we're already in a transaction
+        $inTransaction = DB::transactionLevel() > 0;
+        
+        if (!$inTransaction) {
+            DB::beginTransaction();
+        }
         
         try {
             // Format dates to avoid timezone issues
             if (!empty($data['manufacture_date'])) {
-                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['manufacture_date'], $matches)) {
+                if (preg_match('/(\d{4}-\d{2}-\d{2})/', $data['manufacture_date'], $matches)) {
                     $data['manufacture_date'] = $matches[1];
                 }
             }
             if (!empty($data['expiry_date'])) {
-                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['expiry_date'], $matches)) {
+                if (preg_match('/(\d{4}-\d{2}-\d{2})/', $data['expiry_date'], $matches)) {
                     $data['expiry_date'] = $matches[1];
                 }
             }
@@ -34,6 +40,10 @@ class BatchService
             // Generate batch number if not provided
             if (empty($data['batch_number'])) {
                 $data['batch_number'] = $this->generateBatchNumber($data['product_id']);
+                Log::info('Generated batch number', [
+                    'product_id' => $data['product_id'],
+                    'batch_number' => $data['batch_number']
+                ]);
             }
 
             // Try to find existing batch by batch_number and product_id (regardless of status)
@@ -43,6 +53,13 @@ class BatchService
                 ->first();
 
             if ($existingBatch) {
+                Log::info('Found existing batch, updating', [
+                    'batch_id' => $existingBatch->id,
+                    'batch_number' => $existingBatch->batch_number,
+                    'current_quantity' => $existingBatch->quantity,
+                    'adding_quantity' => $data['quantity']
+                ]);
+                
                 // Add to existing batch
                 $existingBatch->quantity += $data['quantity'];
                 $existingBatch->remaining_quantity += $data['quantity'];
@@ -77,25 +94,75 @@ class BatchService
                     'Added to existing batch'
                 );
 
-                DB::commit();
+                if (!$inTransaction) {
+                    DB::commit();
+                }
+                
                 return $existingBatch;
             } else {
+                Log::info('No existing batch found, creating new one', [
+                    'product_id' => $data['product_id'],
+                    'batch_number' => $data['batch_number'],
+                    'quantity' => $data['quantity']
+                ]);
+                
                 // Create new batch
-                return $this->createBatch($data);
+                $batch = $this->createBatchInternal($data, $inTransaction);
+                
+                if (!$inTransaction) {
+                    DB::commit();
+                }
+                
+                return $batch;
             }
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (!$inTransaction) {
+                DB::rollBack();
+            }
+            
+            Log::error('Error in addOrCreateBatch', [
+                'product_id' => $data['product_id'] ?? null,
+                'batch_number' => $data['batch_number'] ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             throw $e;
         }
     }
 
     /**
-     * Create a new batch for a product.
+     * Create a new batch for a product (public method with transaction management).
      */
     public function createBatch(array $data): ProductBatch
     {
-        DB::beginTransaction();
+        $inTransaction = DB::transactionLevel() > 0;
         
+        if (!$inTransaction) {
+            DB::beginTransaction();
+        }
+        
+        try {
+            $batch = $this->createBatchInternal($data, $inTransaction);
+            
+            if (!$inTransaction) {
+                DB::commit();
+            }
+
+            return $batch;
+        } catch (\Exception $e) {
+            if (!$inTransaction) {
+                DB::rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Internal method to create a new batch (does not manage transactions).
+     */
+    private function createBatchInternal(array $data, bool $inTransaction = false): ProductBatch
+    {
         try {
             // Generate batch number if not provided
             if (empty($data['batch_number'])) {
@@ -108,19 +175,31 @@ class BatchService
             // Format dates to avoid timezone issues - extract only the date part
             if (!empty($data['manufacture_date'])) {
                 // Extract only date part (YYYY-MM-DD) if it's a valid date string
-                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['manufacture_date'], $matches)) {
+                if (preg_match('/(\d{4}-\d{2}-\d{2})/', $data['manufacture_date'], $matches)) {
                     $data['manufacture_date'] = $matches[1];
                 }
             }
             if (!empty($data['expiry_date'])) {
                 // Extract only date part (YYYY-MM-DD) if it's a valid date string
-                if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $data['expiry_date'], $matches)) {
+                if (preg_match('/(\d{4}-\d{2}-\d{2})/', $data['expiry_date'], $matches)) {
                     $data['expiry_date'] = $matches[1];
                 }
             }
 
+            Log::info('Creating new batch', [
+                'product_id' => $data['product_id'],
+                'batch_number' => $data['batch_number'],
+                'quantity' => $data['quantity'],
+                'business_id' => $data['business_id'] ?? null
+            ]);
+
             // Create batch
             $batch = ProductBatch::create($data);
+
+            Log::info('Batch created successfully', [
+                'batch_id' => $batch->id,
+                'batch_number' => $batch->batch_number
+            ]);
 
             // Record transaction
             BatchTransaction::record(
@@ -132,11 +211,15 @@ class BatchService
                 'Initial batch creation'
             );
 
-            DB::commit();
-
             return $batch;
         } catch (\Exception $e) {
-            DB::rollBack();
+            Log::error('Error creating batch', [
+                'product_id' => $data['product_id'] ?? null,
+                'batch_number' => $data['batch_number'] ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             throw $e;
         }
     }

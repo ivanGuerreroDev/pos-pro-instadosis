@@ -10,6 +10,8 @@ use App\Models\PurchaseDetails;
 use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Services\BatchService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PurchaseController extends Controller
 {
@@ -43,111 +45,161 @@ class PurchaseController extends Controller
             'party_id' => 'required|exists:parties,id'
         ]);
 
-        if ($request->dueAmount) {
-            $party = Party::findOrFail($request->party_id);
-            $party->update([
-                'due' => $party->due + $request->dueAmount
-            ]);
-        }
-
-        $business = Business::findOrFail(auth()->user()->business_id);
-        $business->update([
-            'remainingShopBalance' => $business->remainingShopBalance - $request->paidAmount
-        ]);
-
-        $purchase = Purchase::create($request->all() + [
-                        'user_id' => auth()->id(),
-                        'business_id' => auth()->user()->business_id,
-                    ]);
-
-        $purchaseDetails = [];
-        foreach ($request->products as $key => $product_data) {
-            $product = Product::findOrFail($product_data['product_id']);
-            
-            // If product is tracked by batches, calculate quantity from batches
-            if ($product->track_by_batches && isset($product_data['batches']) && is_array($product_data['batches'])) {
-                $totalQuantity = array_sum(array_column($product_data['batches'], 'quantity'));
-            } else {
-                $totalQuantity = $product_data['quantities'] ?? 0;
-            }
-            
-            $purchaseDetails[$key] = [
-                'purchase_id' => $purchase->id,
-                'product_id' => $product_data['product_id'],
-                'quantities' => $totalQuantity,
-                'productSalePrice' => $product_data['productSalePrice'] ?? 0,
-                'productDealerPrice' => $product_data['productDealerPrice'] ?? 0,
-                'productPurchasePrice' => $product_data['productPurchasePrice'] ?? 0,
-                'productWholeSalePrice' => $product_data['productWholeSalePrice'] ?? 0,
-            ];
-        }
-
-        PurchaseDetails::insert($purchaseDetails);
-
-        $batchService = app(BatchService::class);
-
-        foreach ($request->products as $key => $product_data) {
-            $product = Product::findOrFail($product_data['product_id']);
-            
-            // If product is tracked by batches, create or update batches
-            if ($product->track_by_batches) {
-                if (isset($product_data['batches']) && is_array($product_data['batches'])) {
-                    // Multiple batches provided
-                    foreach ($product_data['batches'] as $batchData) {
-                        $batchService->addOrCreateBatch([
-                            'product_id' => $product->id,
-                            'business_id' => auth()->user()->business_id,
-                            'batch_number' => $batchData['batch_number'] ?? null,
-                            'quantity' => $batchData['quantity'] ?? 0,
-                            'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
-                            'manufacture_date' => $batchData['manufacture_date'] ?? null,
-                            'expiry_date' => $batchData['expiry_date'] ?? null,
-                            'purchase_id' => $purchase->id,
-                            'reference_type' => 'Purchase',
-                            'reference_id' => $purchase->id,
-                        ]);
-                    }
-                } else {
-                    // Single batch (backward compatibility)
-                    $batchService->addOrCreateBatch([
-                        'product_id' => $product->id,
-                        'business_id' => auth()->user()->business_id,
-                        'batch_number' => $product_data['batch_number'] ?? null,
-                        'quantity' => $product_data['quantities'] ?? 0,
-                        'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
-                        'manufacture_date' => $product_data['manufacture_date'] ?? null,
-                        'expiry_date' => $product_data['expiry_date'] ?? null,
-                        'purchase_id' => $purchase->id,
-                        'reference_type' => 'Purchase',
-                        'reference_id' => $purchase->id,
-                    ]);
-                }
-            } else {
-                // Update stock directly for non-batch products
-                $product->update([
-                    'productStock' => $product->productStock + (int) ($product_data['quantities'] ?? 0),
+        DB::beginTransaction();
+        
+        try {
+            if ($request->dueAmount) {
+                $party = Party::findOrFail($request->party_id);
+                $party->update([
+                    'due' => $party->due + $request->dueAmount
                 ]);
             }
-            
-            // Update prices
-            $product->update([
-                'productSalePrice' => $purchaseDetails[$key]['productSalePrice'] ?? $product->productSalePrice,
-                'productDealerPrice' => $purchaseDetails[$key]['productDealerPrice'] ?? $product->productDealerPrice,
-                'productPurchasePrice' => $purchaseDetails[$key]['productPurchasePrice'] ?? $product->productPurchasePrice,
-                'productWholeSalePrice' => $purchaseDetails[$key]['productWholeSalePrice'] ?? $product->productWholeSalePrice,
-                'meta' => [
-                    'productSalePrice' => $product->productSalePrice,
-                    'productDealerPrice' => $product->productDealerPrice,
-                    'productPurchasePrice' => $product->productPurchasePrice,
-                    'productWholeSalePrice' => $product->productWholeSalePrice,
-                ]
-            ]);
-        }
 
-        return response()->json([
-            'message' => __('Data saved successfully.'),
-            'data' => $purchase->load('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details'),
-        ]);
+            $business = Business::findOrFail(auth()->user()->business_id);
+            $business->update([
+                'remainingShopBalance' => $business->remainingShopBalance - $request->paidAmount
+            ]);
+
+            $purchase = Purchase::create($request->all() + [
+                            'user_id' => auth()->id(),
+                            'business_id' => auth()->user()->business_id,
+                        ]);
+
+            $purchaseDetails = [];
+            foreach ($request->products as $key => $product_data) {
+                $product = Product::findOrFail($product_data['product_id']);
+                
+                // If product is tracked by batches, calculate quantity from batches
+                if ($product->track_by_batches && isset($product_data['batches']) && is_array($product_data['batches'])) {
+                    $totalQuantity = array_sum(array_column($product_data['batches'], 'quantity'));
+                } else {
+                    $totalQuantity = $product_data['quantities'] ?? 0;
+                }
+                
+                $purchaseDetails[$key] = [
+                    'purchase_id' => $purchase->id,
+                    'product_id' => $product_data['product_id'],
+                    'quantities' => $totalQuantity,
+                    'productSalePrice' => $product_data['productSalePrice'] ?? 0,
+                    'productDealerPrice' => $product_data['productDealerPrice'] ?? 0,
+                    'productPurchasePrice' => $product_data['productPurchasePrice'] ?? 0,
+                    'productWholeSalePrice' => $product_data['productWholeSalePrice'] ?? 0,
+                ];
+            }
+
+            PurchaseDetails::insert($purchaseDetails);
+
+            $batchService = app(BatchService::class);
+
+            foreach ($request->products as $key => $product_data) {
+                $product = Product::findOrFail($product_data['product_id']);
+                
+                // If product is tracked by batches, create or update batches
+                if ($product->track_by_batches) {
+                    if (isset($product_data['batches']) && is_array($product_data['batches'])) {
+                        // Multiple batches provided
+                        foreach ($product_data['batches'] as $batchIndex => $batchData) {
+                            try {
+                                Log::info('Processing batch', [
+                                    'product_id' => $product->id,
+                                    'batch_number' => $batchData['batch_number'] ?? 'null',
+                                    'quantity' => $batchData['quantity'] ?? 0,
+                                    'purchase_id' => $purchase->id
+                                ]);
+
+                                $batchService->addOrCreateBatch([
+                                    'product_id' => $product->id,
+                                    'business_id' => auth()->user()->business_id,
+                                    'batch_number' => $batchData['batch_number'] ?? null,
+                                    'quantity' => $batchData['quantity'] ?? 0,
+                                    'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
+                                    'manufacture_date' => $batchData['manufacture_date'] ?? null,
+                                    'expiry_date' => $batchData['expiry_date'] ?? null,
+                                    'purchase_id' => $purchase->id,
+                                    'reference_type' => 'Purchase',
+                                    'reference_id' => $purchase->id,
+                                ]);
+
+                                Log::info('Batch processed successfully', [
+                                    'product_id' => $product->id,
+                                    'batch_number' => $batchData['batch_number'] ?? 'null'
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Failed to create/update batch', [
+                                    'product_id' => $product->id,
+                                    'batch_number' => $batchData['batch_number'] ?? 'null',
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+                                throw $e; // Re-throw to rollback the transaction
+                            }
+                        }
+                    } else {
+                        // Single batch (backward compatibility)
+                        try {
+                            $batchService->addOrCreateBatch([
+                                'product_id' => $product->id,
+                                'business_id' => auth()->user()->business_id,
+                                'batch_number' => $product_data['batch_number'] ?? null,
+                                'quantity' => $product_data['quantities'] ?? 0,
+                                'purchase_price' => $product_data['productPurchasePrice'] ?? 0,
+                                'manufacture_date' => $product_data['manufacture_date'] ?? null,
+                                'expiry_date' => $product_data['expiry_date'] ?? null,
+                                'purchase_id' => $purchase->id,
+                                'reference_type' => 'Purchase',
+                                'reference_id' => $purchase->id,
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Failed to create/update single batch', [
+                                'product_id' => $product->id,
+                                'batch_number' => $product_data['batch_number'] ?? 'null',
+                                'error' => $e->getMessage()
+                            ]);
+                            throw $e;
+                        }
+                    }
+                } else {
+                    // Update stock directly for non-batch products
+                    $product->update([
+                        'productStock' => $product->productStock + (int) ($product_data['quantities'] ?? 0),
+                    ]);
+                }
+                
+                // Update prices
+                $product->update([
+                    'productSalePrice' => $purchaseDetails[$key]['productSalePrice'] ?? $product->productSalePrice,
+                    'productDealerPrice' => $purchaseDetails[$key]['productDealerPrice'] ?? $product->productDealerPrice,
+                    'productPurchasePrice' => $purchaseDetails[$key]['productPurchasePrice'] ?? $product->productPurchasePrice,
+                    'productWholeSalePrice' => $purchaseDetails[$key]['productWholeSalePrice'] ?? $product->productWholeSalePrice,
+                    'meta' => [
+                        'productSalePrice' => $product->productSalePrice,
+                        'productDealerPrice' => $product->productDealerPrice,
+                        'productPurchasePrice' => $product->productPurchasePrice,
+                        'productWholeSalePrice' => $product->productWholeSalePrice,
+                    ]
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => __('Data saved successfully.'),
+                'data' => $purchase->load('user:id,name', 'party:id,name,email,phone,type', 'details:id,purchase_id,product_id,productPurchasePrice,quantities', 'details.product:id,productName,category_id', 'details.product.category:id,categoryName', 'productBatches:id,purchase_id,product_id,batch_number,quantity,expiry_date,manufacture_date', 'purchaseReturns.details'),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            Log::error('Purchase creation failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+            
+            return response()->json([
+                'message' => __('Failed to create purchase: ') . $e->getMessage(),
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
