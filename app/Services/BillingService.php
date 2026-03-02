@@ -20,6 +20,8 @@ class BillingService
     protected $repoEnv;
     protected $iambOverride;
     protected $denvFeOverride;
+    protected $httpConnectTimeout;
+    protected $httpTimeout;
 
     protected function isLiveMode(): bool
     {
@@ -46,6 +48,8 @@ class BillingService
         $this->repoEnv = config('billing.repo_env');
         $this->iambOverride = config('billing.iamb');
         $this->denvFeOverride = config('billing.denv_fe');
+        $this->httpConnectTimeout = (int) config('billing.http_connect_timeout', 5);
+        $this->httpTimeout = (int) config('billing.http_timeout', 15);
     }
 
     /**
@@ -60,9 +64,11 @@ class BillingService
             $jsonData = $this->formatSaleDataForBilling($sale, $party);
             
             // Send data to external billing API with EMAGIC_API_KEY header
-            $response = Http::withHeaders([
-                'Ocp-Apim-Subscription-Key' => $this->apiKey
-            ])->post($this->apiUrl."/facturar/v1.1/autorizar", $jsonData);
+                        $response = Http::withHeaders([
+                                'Ocp-Apim-Subscription-Key' => $this->apiKey
+                        ])->connectTimeout($this->httpConnectTimeout)
+                            ->timeout($this->httpTimeout)
+                            ->post($this->apiUrl."/facturar/v1.1/autorizar", $jsonData);
 
             // Debug log for API request and response
             Log::debug('Billing API Request', [
@@ -413,9 +419,22 @@ class BillingService
             $url = $this->apiUrl . '/facturador-repositorio/' . $repoEnvironment . '/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
             
             // Realiza la solicitud con el encabezado requerido
-            $response = Http::withHeaders([
-                'Ocp-Apim-Subscription-Key' => $this->apiKey
-            ])->get($url);
+            try {
+                $response = Http::withHeaders([
+                    'Ocp-Apim-Subscription-Key' => $this->apiKey
+                ])->connectTimeout($this->httpConnectTimeout)
+                  ->timeout($this->httpTimeout)
+                  ->get($url);
+            } catch (\Exception $e) {
+                Log::error('Billing PDF HTTP timeout/connection error', [
+                    'sale_id' => $saleId,
+                    'url' => $url,
+                    'message' => $e->getMessage(),
+                    'connect_timeout' => $this->httpConnectTimeout,
+                    'timeout' => $this->httpTimeout,
+                ]);
+                return false;
+            }
             
             if ($response->successful()) {
                 return $response->body();
