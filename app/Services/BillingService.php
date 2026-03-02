@@ -305,14 +305,47 @@ class BillingService
      */
     public function getBillingPdfFile($saleId)
     {
-        $sale = Sale::findOrFail($saleId);
-        $business = Business::findOrFail($sale->business_id);
-        $invoiceData = $business->invoice_data;
-        
         // Get the dgi_invoice record
         $dgiInvoice = DB::table('dgi_invoice')->where('sale_id', $saleId)->first();
-        
+
         if ($dgiInvoice) {
+            $cufe = $dgiInvoice->dgi_invoice_id;
+
+            if (empty($cufe) && !empty($dgiInvoice->xml_response)) {
+                try {
+                    $xml = simplexml_load_string($dgiInvoice->xml_response);
+                    if ($xml !== false) {
+                        $nodes = $xml->xpath('//*[local-name()="dId"]');
+                        if (!empty($nodes)) {
+                            $cufe = (string) $nodes[0];
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Billing PDF XML parse warning', [
+                        'sale_id' => $saleId,
+                        'message' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            if (empty($cufe)) {
+                Log::error('Billing PDF Error: missing CUFE', [
+                    'sale_id' => $saleId,
+                    'dgi_invoice_id' => $dgiInvoice->dgi_invoice_id,
+                ]);
+                return false;
+            }
+
+            $jwtSecret = env('EMAGIC_JWT_SECRET');
+            if (empty($jwtSecret)) {
+                Log::error('Billing PDF Error: missing EMAGIC_JWT_SECRET', [
+                    'sale_id' => $saleId,
+                ]);
+                return false;
+            }
+
+            $repoEnvironment = env('EMAGIC_REPO_ENV', env('EMAGIC_MODE', 'test') === 'live' ? 'live' : 'test');
+
             // Función para codificar en base64url según estándar JWT
             $base64url_encode = function ($data) {
                 return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
@@ -320,14 +353,14 @@ class BillingService
             
             // Genera los componentes del JWT
             $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
-            $payload = json_encode(['cufe' => $dgiInvoice->dgi_invoice_id]);
+            $payload = json_encode(['cufe' => $cufe]);
             
             // Codifica header y payload en base64url
             $encoded_header = $base64url_encode($header);
             $encoded_payload = $base64url_encode($payload);
             
             // Crea la firma usando el método correcto
-            $signature = hash_hmac('sha256', $encoded_header . '.' . $encoded_payload, env('EMAGIC_JWT_SECRET'), true);
+            $signature = hash_hmac('sha256', $encoded_header . '.' . $encoded_payload, $jwtSecret, true);
             $encoded_signature = $base64url_encode($signature);
             
             // Construye el JWT completo
@@ -335,11 +368,12 @@ class BillingService
             
             Log::debug('Billing PDF', [
                 'sale_id' => $saleId,
-                'jwt' => $jwt
+                'jwt' => $jwt,
+                'repo_environment' => $repoEnvironment,
             ]);
             
             // Crea la URL con el JWT
-            $url = $this->apiUrl . '/facturador-repositorio/test/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
+            $url = $this->apiUrl . '/facturador-repositorio/' . $repoEnvironment . '/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
             
             // Realiza la solicitud con el encabezado requerido
             $response = Http::withHeaders([
@@ -351,12 +385,17 @@ class BillingService
             } else {
                 Log::error('Billing PDF Error', [
                     'sale_id' => $saleId,
+                    'url' => $url,
                     'response' => $response->body(),
                     'status' => $response->status()
                 ]);
                 return false;
             }
         }
+
+        Log::warning('Billing PDF not found: missing dgi_invoice record', [
+            'sale_id' => $saleId,
+        ]);
         
         return null;
     }
