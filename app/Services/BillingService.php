@@ -19,6 +19,7 @@ class BillingService
     protected $mode;
     protected $repoEnv;
     protected $iambOverride;
+    protected $denvFeOverride;
 
     protected function isLiveMode(): bool
     {
@@ -44,6 +45,7 @@ class BillingService
         $this->mode = config('billing.mode', 'test');
         $this->repoEnv = config('billing.repo_env');
         $this->iambOverride = config('billing.iamb');
+        $this->denvFeOverride = config('billing.denv_fe');
     }
 
     /**
@@ -170,6 +172,7 @@ class BillingService
     {
         $isLiveMode = $this->isLiveMode();
         $iamb = in_array((int) $this->iambOverride, [1, 2], true) ? (int) $this->iambOverride : ($isLiveMode ? 1 : 2);
+        $denvFe = in_array((int) $this->denvFeOverride, [1, 2], true) ? (int) $this->denvFeOverride : $iamb;
 
         // Get the business and its invoice data
         $business = Business::with('invoice_data')->findOrFail($sale->business_id);
@@ -186,7 +189,13 @@ class BillingService
         $partyInvoiceData = (object) $partyInvoiceData;
         Log::debug('Invoice', [
             'invoiceData' => $invoiceData,
-            'partyInvoiceData' => $partyInvoiceData
+            'partyInvoiceData' => $partyInvoiceData,
+            'billing_env' => [
+                'mode' => $this->mode,
+                'iamb' => $iamb,
+                'denvFE' => $denvFe,
+                'repo_env' => $this->getRepoEnvironment(),
+            ]
         ]);
         $formattedData = [
             'gitem' => [],
@@ -216,7 +225,7 @@ class BillingService
                 'itipoSuc' => 1,
                 'dptoFacDF' => str_pad($business->id, 3, '0', STR_PAD_LEFT),
                 'iproGen' => 1,
-                'denvFE' => 1,
+                'denvFE' => $denvFe,
                 'iformCAFE' => 1,
                 'idest' => 1,
                 'gdatRec' => [

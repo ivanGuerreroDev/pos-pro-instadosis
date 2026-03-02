@@ -7,4 +7,5 @@ return [
     'mode' => env('EMAGIC_MODE', 'test'),
     'repo_env' => env('EMAGIC_REPO_ENV'),
     'iamb' => env('EMAGIC_IAMB'),
+    'denv_fe' => env('EMAGIC_DENV_FE'),
 ];
