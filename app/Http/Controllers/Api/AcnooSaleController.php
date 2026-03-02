@@ -221,10 +221,18 @@ class AcnooSaleController extends Controller
         
         // Validación del contenido del PDF
         if (!$pdfFile || empty($pdfFile)) {
+            $sale = Sale::find($request->sale_id);
+            $meta = (array) ($sale->meta ?? []);
+
+            $billingError = $meta['billing_error'] ?? null;
+            $billingStatus = $meta['billing_status'] ?? null;
+
             return response()->json([
                 'message' => __('PDF file could not be generated.'),
+                'billing_status' => $billingStatus,
+                'billing_error' => $billingError,
                 'data' => null,
-            ], 404);
+            ], 422);
         }
         
         // Codificación a base64

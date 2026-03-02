@@ -15,6 +15,22 @@ class BillingService
 {
     protected $apiUrl;
 
+    protected function isLiveMode(): bool
+    {
+        $mode = strtolower((string) env('EMAGIC_MODE', 'test'));
+        return in_array($mode, ['live', 'prod', 'production'], true);
+    }
+
+    protected function getRepoEnvironment(): string
+    {
+        $repoEnv = strtolower((string) env('EMAGIC_REPO_ENV', ''));
+        if (in_array($repoEnv, ['live', 'test'], true)) {
+            return $repoEnv;
+        }
+
+        return $this->isLiveMode() ? 'live' : 'test';
+    }
+
     public function __construct()
     {   
         // The API URL should be set in the .env file
@@ -143,6 +159,8 @@ class BillingService
      */
     protected function formatSaleDataForBilling(Sale $sale, $party = null)
     {
+        $isLiveMode = $this->isLiveMode();
+
         // Get the business and its invoice data
         $business = Business::with('invoice_data')->findOrFail($sale->business_id);
         $invoiceData = $business->invoice_data;
@@ -175,12 +193,12 @@ class BillingService
                         'dprov' => $invoiceData->dprov ?? 'Panamá',
                         'ddistr' => $invoiceData->ddistr ?? 'Panamá'
                     ],
-                    'dnombEm' => env("EMAGIC_MODE", "test") == "live" ? ($invoiceData->dnombEm ?? $business->companyName) : "FE generada en ambiente de pruebas - sin valor comercial ni fiscal",
+                    'dnombEm' => $isLiveMode ? ($invoiceData->dnombEm ?? $business->companyName) : "FE generada en ambiente de pruebas - sin valor comercial ni fiscal",
                     'ddirecEm' => $invoiceData->ddirecEm ?? $business->address,
                     'grucEmi' => [
-                        'ddv' => env("EMAGIC_MODE", "test") ? "37" :$invoiceData->ddv,
-                        'druc' => env("EMAGIC_MODE", "test") ? "155705519-2-2021" :$invoiceData->druc,
-                        'dtipoRuc' => env("EMAGIC_MODE", "test") ? 2 : ($invoiceData->dtipoRuc == "Natural" ? 1 : 2)
+                        'ddv' => $isLiveMode ? $invoiceData->ddv : "37",
+                        'druc' => $isLiveMode ? $invoiceData->druc : "155705519-2-2021",
+                        'dtipoRuc' => $isLiveMode ? ($invoiceData->dtipoRuc == "Natural" ? 1 : 2) : 2
                     ]
                 ],
                 'dseg' => null,
@@ -226,7 +244,7 @@ class BillingService
                 'itipoOp' => 1,
                 'dnroDF' => str_pad((int)$invoiceNumber, 9, '0', STR_PAD_LEFT),
                 'ientCAFE' => 1,
-                'iamb' => env("EMAGIC_MODE", "test") == "live" ? 1 : 2,
+                'iamb' => $isLiveMode ? 1 : 2,
                 'dfechaEm' => date('Y-m-d\TH:i:sP', strtotime($sale->saleDate ?? now())),
                 'gdfref' => null,
                 'idoc' => '01'
@@ -344,7 +362,7 @@ class BillingService
                 return false;
             }
 
-            $repoEnvironment = env('EMAGIC_REPO_ENV', env('EMAGIC_MODE', 'test') === 'live' ? 'live' : 'test');
+            $repoEnvironment = $this->getRepoEnvironment();
 
             // Función para codificar en base64url según estándar JWT
             $base64url_encode = function ($data) {
