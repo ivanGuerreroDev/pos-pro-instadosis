@@ -14,16 +14,21 @@ use Illuminate\Support\Facades\Log;
 class BillingService
 {
     protected $apiUrl;
+    protected $apiKey;
+    protected $jwtSecret;
+    protected $mode;
+    protected $repoEnv;
+    protected $iambOverride;
 
     protected function isLiveMode(): bool
     {
-        $mode = strtolower((string) env('EMAGIC_MODE', 'test'));
+        $mode = strtolower((string) $this->mode);
         return in_array($mode, ['live', 'prod', 'production'], true);
     }
 
     protected function getRepoEnvironment(): string
     {
-        $repoEnv = strtolower((string) env('EMAGIC_REPO_ENV', ''));
+        $repoEnv = strtolower((string) $this->repoEnv);
         if (in_array($repoEnv, ['live', 'test'], true)) {
             return $repoEnv;
         }
@@ -32,9 +37,13 @@ class BillingService
     }
 
     public function __construct()
-    {   
-        // The API URL should be set in the .env file
-        $this->apiUrl = env('EMAGIC_API_URL', 'https://api.facturacion.example.com');
+    {
+        $this->apiUrl = config('billing.api_url', 'https://api.facturacion.example.com');
+        $this->apiKey = config('billing.api_key');
+        $this->jwtSecret = config('billing.jwt_secret');
+        $this->mode = config('billing.mode', 'test');
+        $this->repoEnv = config('billing.repo_env');
+        $this->iambOverride = config('billing.iamb');
     }
 
     /**
@@ -50,7 +59,7 @@ class BillingService
             
             // Send data to external billing API with EMAGIC_API_KEY header
             $response = Http::withHeaders([
-                'Ocp-Apim-Subscription-Key' => env('EMAGIC_API_KEY')
+                'Ocp-Apim-Subscription-Key' => $this->apiKey
             ])->post($this->apiUrl."/facturar/v1.1/autorizar", $jsonData);
 
             // Debug log for API request and response
@@ -160,6 +169,7 @@ class BillingService
     protected function formatSaleDataForBilling(Sale $sale, $party = null)
     {
         $isLiveMode = $this->isLiveMode();
+        $iamb = in_array((int) $this->iambOverride, [1, 2], true) ? (int) $this->iambOverride : ($isLiveMode ? 1 : 2);
 
         // Get the business and its invoice data
         $business = Business::with('invoice_data')->findOrFail($sale->business_id);
@@ -244,7 +254,7 @@ class BillingService
                 'itipoOp' => 1,
                 'dnroDF' => str_pad((int)$invoiceNumber, 9, '0', STR_PAD_LEFT),
                 'ientCAFE' => 1,
-                'iamb' => $isLiveMode ? 1 : 2,
+                'iamb' => $iamb,
                 'dfechaEm' => date('Y-m-d\TH:i:sP', strtotime($sale->saleDate ?? now())),
                 'gdfref' => null,
                 'idoc' => '01'
@@ -354,7 +364,7 @@ class BillingService
                 return false;
             }
 
-            $jwtSecret = env('EMAGIC_JWT_SECRET');
+            $jwtSecret = $this->jwtSecret;
             if (empty($jwtSecret)) {
                 Log::error('Billing PDF Error: missing EMAGIC_JWT_SECRET', [
                     'sale_id' => $saleId,
@@ -395,7 +405,7 @@ class BillingService
             
             // Realiza la solicitud con el encabezado requerido
             $response = Http::withHeaders([
-                'Ocp-Apim-Subscription-Key' => env('EMAGIC_API_KEY')
+                'Ocp-Apim-Subscription-Key' => $this->apiKey
             ])->get($url);
             
             if ($response->successful()) {
