@@ -183,6 +183,52 @@
 - `"add"`: Agregar unidades
 - `"subtract"`: Restar unidades
 
+Tambien se mantiene compatibilidad con este formato alternativo:
+
+```json
+{
+  "new_quantity": 95,
+  "reason": "Correccion de inventario"
+}
+```
+
+### Historial de Movimientos por Lote
+
+**Endpoint:** `GET /api/v1/product-batches/{id}/transactions`
+
+**Respuesta:**
+
+```json
+{
+  "message": "Data fetched successfully.",
+  "data": [
+    {
+      "id": 140,
+      "type": "sale",
+      "transaction_type": "sale",
+      "quantity": -2,
+      "reference_type": "Sale",
+      "reference_id": 3001,
+      "notes": "Sale transaction",
+      "created_at": "2026-03-10T14:12:00.000000Z",
+      "user": {
+        "id": 5,
+        "name": "Maria Perez"
+      }
+    }
+  ]
+}
+```
+
+Incluye eventos de compra, venta, ajuste manual, descarte y devolucion.
+
+### Eliminacion de Lote (Deshabilitada)
+
+**Endpoint:** `DELETE /api/v1/product-batches/{id}`
+
+Esta operacion ahora esta bloqueada por politica de inventario y responde `403`.
+Use `POST /adjust` para correcciones manuales de cantidad.
+
 ### Lotes de un Producto Específico
 
 **Endpoint:** `GET /api/v1/product-batches/product/{productId}`

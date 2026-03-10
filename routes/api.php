@@ -35,6 +35,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/product/{productId}/available', [Api\ProductBatchController::class, 'availableForSale']);
             // Parameterized routes after
             Route::get('/{productBatch}', [Api\ProductBatchController::class, 'show']);
+            Route::get('/{productBatch}/transactions', [Api\ProductBatchController::class, 'transactions']);
             Route::put('/{productBatch}', [Api\ProductBatchController::class, 'update']);
             Route::delete('/{productBatch}', [Api\ProductBatchController::class, 'destroy']);
             Route::post('/{productBatch}/discard', [Api\ProductBatchController::class, 'discard']);

@@ -155,16 +155,9 @@ class ProductBatchController extends Controller
             return response()->json(['message' => __('Unauthorized')], 403);
         }
 
-        // If batch has remaining stock, automatically discard it before deletion
-        if ($productBatch->remaining_quantity > 0) {
-            $this->batchService->discardBatch($productBatch, 'Automatic discard before deletion');
-        }
-
-        $productBatch->delete();
-
         return response()->json([
-            'message' => __('Batch deleted successfully.'),
-        ]);
+            'message' => __('Batch deletion is disabled. Use manual stock adjustments instead.'),
+        ], 403);
     }
 
     /**
@@ -200,13 +193,40 @@ class ProductBatchController extends Controller
         }
 
         $request->validate([
-            'new_quantity' => 'required|integer|min:0',
             'reason' => 'required|string',
+            'new_quantity' => 'nullable|integer|min:0',
+            'quantity' => 'nullable|integer|min:0',
+            'type' => 'nullable|in:add,subtract',
         ]);
+
+        $newQuantity = $request->input('new_quantity');
+
+        // Support delta-based adjustments from mobile app.
+        if ($newQuantity === null && $request->filled('quantity') && $request->filled('type')) {
+            $delta = (int) $request->input('quantity');
+            $currentQuantity = (int) $productBatch->remaining_quantity;
+            $operation = $request->input('type');
+
+            $newQuantity = $operation === 'add'
+                ? $currentQuantity + $delta
+                : $currentQuantity - $delta;
+        }
+
+        if ($newQuantity === null) {
+            return response()->json([
+                'message' => __('Provide either new_quantity or quantity + type.'),
+            ], 422);
+        }
+
+        if ((int) $newQuantity < 0) {
+            return response()->json([
+                'message' => __('Adjusted quantity cannot be negative.'),
+            ], 422);
+        }
 
         $this->batchService->adjustBatch(
             $productBatch,
-            $request->new_quantity,
+            (int) $newQuantity,
             $request->reason
         );
 
@@ -271,6 +291,43 @@ class ProductBatchController extends Controller
         return response()->json([
             'message' => __('Data fetched successfully.'),
             'data' => $availableBatches,
+        ]);
+    }
+
+    /**
+     * Get movement history for a specific batch.
+     */
+    public function transactions(ProductBatch $productBatch)
+    {
+        if ($productBatch->business_id !== auth()->user()->business_id) {
+            return response()->json(['message' => __('Unauthorized')], 403);
+        }
+
+        $transactions = $productBatch->transactions()
+            ->with('user:id,name')
+            ->latest()
+            ->get()
+            ->map(function ($transaction) {
+                return [
+                    'id' => $transaction->id,
+                    'transaction_type' => $transaction->transaction_type,
+                    'type' => $transaction->transaction_type,
+                    'quantity' => $transaction->quantity,
+                    'reference_type' => $transaction->reference_type,
+                    'reference_id' => $transaction->reference_id,
+                    'notes' => $transaction->notes,
+                    'created_at' => $transaction->created_at,
+                    'user' => $transaction->user ? [
+                        'id' => $transaction->user->id,
+                        'name' => $transaction->user->name,
+                    ] : null,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'message' => __('Data fetched successfully.'),
+            'data' => $transactions,
         ]);
     }
 }
