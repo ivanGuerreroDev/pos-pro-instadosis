@@ -194,6 +194,7 @@ class ProductBatchController extends Controller
 
         $request->validate([
             'reason' => 'required|string',
+            'observation' => 'nullable|string',
             'new_quantity' => 'nullable|integer|min:0',
             'quantity' => 'nullable|integer|min:0',
             'type' => 'nullable|in:add,subtract',
@@ -224,10 +225,18 @@ class ProductBatchController extends Controller
             ], 422);
         }
 
+        $reason = trim((string) $request->input('reason'));
+        $observation = trim((string) $request->input('observation', ''));
+        $notes = 'Motivo: ' . $reason;
+
+        if ($observation !== '') {
+            $notes .= "\nObservacion: " . $observation;
+        }
+
         $this->batchService->adjustBatch(
             $productBatch,
             (int) $newQuantity,
-            $request->reason
+            $notes
         );
 
         return response()->json([
