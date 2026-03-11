@@ -9,6 +9,7 @@ use App\Models\Business;
 use App\Models\SaleDetails;
 use App\Models\BatchSaleDetail;
 use App\Services\BillingService;
+use App\Services\BatchService;
 use App\Services\BatchAllocationService;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -38,7 +39,12 @@ class AcnooSaleController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request, BillingService $billingService, BatchAllocationService $batchAllocationService)
+    public function store(
+        Request $request,
+        BillingService $billingService,
+        BatchAllocationService $batchAllocationService,
+        BatchService $batchService
+    )
     {
         $request->validate([
             'products' => 'required|array',
@@ -176,6 +182,14 @@ class AcnooSaleController extends Controller
                             'batch_id' => $allocation['batch_id'],
                             'quantity' => $allocation['quantity'],
                         ]);
+
+                        // Decrease batch stock and record transaction for batch history.
+                        $batchService->decreaseBatchQuantity(
+                            $allocation['batch'],
+                            (int) $allocation['quantity'],
+                            'Sale',
+                            $sale->id
+                        );
                     }
                 } else {
                     // Traditional stock decrement for non-batch products
