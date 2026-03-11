@@ -10,6 +10,7 @@ use App\Models\PurchaseDetails;
 use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Services\BatchService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -42,8 +43,14 @@ class PurchaseController extends Controller
         $request->validate([
             'products' => 'required|array',
             'products.*.product_id' => 'required|exists:products,id',
-            'party_id' => 'required|exists:parties,id'
+            'party_id' => 'required|exists:parties,id',
+            'purchaseDate' => 'nullable|date',
         ]);
+
+        $payload = $request->all();
+        if (!empty($payload['purchaseDate'])) {
+            $payload['purchaseDate'] = Carbon::parse($payload['purchaseDate'])->format('Y-m-d 00:00:00');
+        }
 
         DB::beginTransaction();
         
@@ -60,7 +67,7 @@ class PurchaseController extends Controller
                 'remainingShopBalance' => $business->remainingShopBalance - $request->paidAmount
             ]);
 
-            $purchase = Purchase::create($request->all() + [
+            $purchase = Purchase::create($payload + [
                             'user_id' => auth()->id(),
                             'business_id' => auth()->user()->business_id,
                         ]);
@@ -210,8 +217,14 @@ class PurchaseController extends Controller
         $request->validate([
             'products' => 'required|array',
             'products.*.product_id' => 'required|exists:products,id',
-            'party_id' => 'required|exists:parties,id'
+            'party_id' => 'required|exists:parties,id',
+            'purchaseDate' => 'nullable|date',
         ]);
+
+        $payload = $request->all();
+        if (!empty($payload['purchaseDate'])) {
+            $payload['purchaseDate'] = Carbon::parse($payload['purchaseDate'])->format('Y-m-d 00:00:00');
+        }
 
         $prevDetails = PurchaseDetails::where('purchase_id', $purchase->id)->get();
         foreach ($prevDetails as $prevProduct) {
@@ -277,7 +290,7 @@ class PurchaseController extends Controller
             'remainingShopBalance' => ($business->remainingShopBalance + $purchase->paidAmount) - $request->paidAmount
         ]);
 
-        $purchase->update($request->all() + [
+        $purchase->update($payload + [
             'user_id' => auth()->id(),
             'business_id' => auth()->user()->business_id,
         ]);
