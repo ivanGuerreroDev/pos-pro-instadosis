@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Services\BatchService;
 use App\Services\BatchAllocationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProductBatchController extends Controller
 {
@@ -233,6 +234,44 @@ class ProductBatchController extends Controller
             $notes .= "\nObservacion: " . $observation;
         }
 
+        $product = $productBatch->product;
+        $isNoBatchProduct = ($productBatch->batch_number === 'SIN LOTE')
+            && $product
+            && !$product->track_by_batches;
+
+        if ($isNoBatchProduct) {
+            DB::transaction(function () use ($product, $productBatch, $newQuantity, $notes) {
+                $currentStock = (int) ($product->productStock ?? 0);
+                $delta = (int) $newQuantity - $currentStock;
+
+                $product->update([
+                    'productStock' => (int) $newQuantity,
+                ]);
+
+                $productBatch->update([
+                    'quantity' => (int) $newQuantity,
+                    'remaining_quantity' => (int) $newQuantity,
+                    'status' => 'active',
+                ]);
+
+                if ($delta !== 0) {
+                    \App\Models\BatchTransaction::record(
+                        $productBatch->id,
+                        'adjustment',
+                        $delta,
+                        'Manual',
+                        null,
+                        $notes
+                    );
+                }
+            });
+
+            return response()->json([
+                'message' => __('Stock adjusted successfully.'),
+                'data' => $productBatch->fresh(),
+            ]);
+        }
+
         $this->batchService->adjustBatch(
             $productBatch,
             (int) $newQuantity,
@@ -337,6 +376,33 @@ class ProductBatchController extends Controller
         return response()->json([
             'message' => __('Data fetched successfully.'),
             'data' => $transactions,
+        ]);
+    }
+
+    /**
+     * Ensure a technical "SIN LOTE" batch exists for products not tracked by batches.
+     */
+    public function ensureNoBatch($productId)
+    {
+        $product = Product::where('id', $productId)
+            ->where('business_id', auth()->user()->business_id)
+            ->first();
+
+        if (!$product) {
+            return response()->json(['message' => __('Product not found')], 404);
+        }
+
+        if ($product->track_by_batches) {
+            return response()->json([
+                'message' => __('Product already uses real batches.'),
+            ], 422);
+        }
+
+        $batch = $this->batchService->getOrCreateNoBatchBatch($product);
+
+        return response()->json([
+            'message' => __('Data fetched successfully.'),
+            'data' => $batch->load('product:id,productName'),
         ]);
     }
 }

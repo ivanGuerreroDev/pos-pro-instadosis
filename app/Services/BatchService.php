@@ -358,6 +358,31 @@ class BatchService
     /**
      * Generate a unique batch number for a product.
      */
+    public function getOrCreateNoBatchBatch(Product $product): ProductBatch
+    {
+        $batch = ProductBatch::where('product_id', $product->id)
+            ->where('batch_number', 'SIN LOTE')
+            ->first();
+
+        if ($batch) {
+            return $batch;
+        }
+
+        return ProductBatch::create([
+            'product_id' => $product->id,
+            'business_id' => $product->business_id,
+            'batch_number' => 'SIN LOTE',
+            'quantity' => (int) ($product->productStock ?? 0),
+            'remaining_quantity' => (int) ($product->productStock ?? 0),
+            'purchase_price' => $product->productPurchasePrice ?? 0,
+            'status' => 'active',
+            'notes' => 'Lote tecnico para productos sin lotes',
+        ]);
+    }
+
+    /**
+     * Generate a unique batch number for a product.
+     */
     private function generateBatchNumber(int $productId): string
     {
         $product = Product::findOrFail($productId);

@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function () {
             // Specific routes first (before parameterized routes)
             Route::get('/product/{productId}', [Api\ProductBatchController::class, 'productBatches']);
             Route::get('/product/{productId}/available', [Api\ProductBatchController::class, 'availableForSale']);
+            Route::post('/product/{productId}/ensure-no-batch', [Api\ProductBatchController::class, 'ensureNoBatch']);
             // Parameterized routes after
             Route::get('/{productBatch}', [Api\ProductBatchController::class, 'show']);
             Route::get('/{productBatch}/transactions', [Api\ProductBatchController::class, 'transactions']);
