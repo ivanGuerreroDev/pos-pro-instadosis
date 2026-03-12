@@ -192,8 +192,27 @@ class AcnooSaleController extends Controller
                         );
                     }
                 } else {
-                    // Traditional stock decrement for non-batch products
-                    $product->decrement('productStock', $productData['quantities']);
+                    // Non-batch product: keep stock + technical "SIN LOTE" history in sync.
+                    $soldQuantity = (int) ($productData['quantities'] ?? 0);
+                    $product->decrement('productStock', $soldQuantity);
+                    $product->refresh();
+
+                    $noBatch = $batchService->getOrCreateNoBatchBatch($product);
+
+                    \App\Models\BatchTransaction::record(
+                        $noBatch->id,
+                        'sale',
+                        -$soldQuantity,
+                        'Sale',
+                        $sale->id,
+                        'Sale transaction'
+                    );
+
+                    $noBatch->update([
+                        'quantity' => (int) ($product->productStock ?? 0),
+                        'remaining_quantity' => (int) ($product->productStock ?? 0),
+                        'status' => 'active',
+                    ]);
                 }
             }
 

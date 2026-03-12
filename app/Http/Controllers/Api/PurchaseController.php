@@ -166,9 +166,30 @@ class PurchaseController extends Controller
                         }
                     }
                 } else {
-                    // Update stock directly for non-batch products
+                    // Non-batch product: keep stock + technical "SIN LOTE" history in sync.
+                    $purchasedQuantity = (int) ($product_data['quantities'] ?? 0);
                     $product->update([
-                        'productStock' => $product->productStock + (int) ($product_data['quantities'] ?? 0),
+                        'productStock' => $product->productStock + $purchasedQuantity,
+                    ]);
+
+                    $product->refresh();
+                    $noBatch = $batchService->getOrCreateNoBatchBatch($product);
+
+                    if ($purchasedQuantity > 0) {
+                        \App\Models\BatchTransaction::record(
+                            $noBatch->id,
+                            'purchase',
+                            $purchasedQuantity,
+                            'Purchase',
+                            $purchase->id,
+                            'Purchase transaction'
+                        );
+                    }
+
+                    $noBatch->update([
+                        'quantity' => (int) ($product->productStock ?? 0),
+                        'remaining_quantity' => (int) ($product->productStock ?? 0),
+                        'status' => 'active',
                     ]);
                 }
                 
