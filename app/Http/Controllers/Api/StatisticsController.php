@@ -10,7 +10,10 @@ use App\Models\Expense;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Purchase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Services\ProductRotationAnalyticsService;
 use App\Http\Controllers\Controller;
 
 class StatisticsController extends Controller
@@ -129,5 +132,38 @@ class StatisticsController extends Controller
         }
 
         return $rows;
+    }
+
+    public function productRotationAnalytics(Request $request, int $productId, ProductRotationAnalyticsService $analyticsService)
+    {
+        try {
+            $businessId = auth()->user()->business_id;
+            $months = (int) $request->query('months', 3);
+
+            $data = $analyticsService->getProductAnalytics($businessId, $productId, $months);
+
+            return response()->json([
+                'message' => __('Data fetched successfully.'),
+                'data' => $data,
+            ]);
+        } catch (ModelNotFoundException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 404);
+        }
+    }
+
+    public function productRotationSummary(Request $request, ProductRotationAnalyticsService $analyticsService)
+    {
+        $businessId = auth()->user()->business_id;
+        $months = (int) $request->query('months', 3);
+        $limit = (int) $request->query('limit', 20);
+
+        $data = $analyticsService->getBusinessRiskSummary($businessId, $months, $limit);
+
+        return response()->json([
+            'message' => __('Data fetched successfully.'),
+            'data' => $data,
+        ]);
     }
 }

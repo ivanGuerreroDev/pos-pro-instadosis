@@ -18,6 +18,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('summary', [Api\StatisticsController::class, 'summary']);
         Route::get('dashboard', [Api\StatisticsController::class, 'dashboard']);
+        Route::get('product-analytics/product/{productId}', [Api\StatisticsController::class, 'productRotationAnalytics']);
+        Route::get('product-analytics/summary', [Api\StatisticsController::class, 'productRotationSummary']);
 
         Route::apiResource('parties', Api\PartyController::class);
         Route::apiResource('users', Api\AcnooUserController::class)->except('show');
