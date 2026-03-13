@@ -138,7 +138,7 @@ class StatisticsController extends Controller
     {
         try {
             $businessId = auth()->user()->business_id;
-            $months = (int) $request->query('months', 3);
+            $months = $this->resolveAnalyticsMonths($request);
 
             $data = $analyticsService->getProductAnalytics($businessId, $productId, $months);
 
@@ -156,7 +156,7 @@ class StatisticsController extends Controller
     public function productRotationSummary(Request $request, ProductRotationAnalyticsService $analyticsService)
     {
         $businessId = auth()->user()->business_id;
-        $months = (int) $request->query('months', 3);
+        $months = $this->resolveAnalyticsMonths($request);
         $limit = (int) $request->query('limit', 20);
 
         $data = $analyticsService->getBusinessRiskSummary($businessId, $months, $limit);
@@ -165,5 +165,13 @@ class StatisticsController extends Controller
             'message' => __('Data fetched successfully.'),
             'data' => $data,
         ]);
+    }
+
+    private function resolveAnalyticsMonths(Request $request): int
+    {
+        $months = (int) $request->query('months', 3);
+        $allowed = [3, 6, 12];
+
+        return in_array($months, $allowed, true) ? $months : 3;
     }
 }
