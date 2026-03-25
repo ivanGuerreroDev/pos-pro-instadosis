@@ -27,55 +27,45 @@ class ProductRotationAnalyticsService
 
         $monthlyUnits = $this->getMonthlyUnits($businessId, $productId, $months);
 
-        $averageMonthlySales = round($monthlyUnits->avg(), 2);
-        $conservativeMonthlySales = round($monthlyUnits->min() ?? 0, 2);
+        $averageMonthlySales = $this->roundUnits((float) ($monthlyUnits->avg() ?? 0));
+        $conservativeMonthlySales = $this->roundUnits((float) ($monthlyUnits->min() ?? 0));
+        $targetPeriodDays = $months * 30;
+        $dailyConsumptionUnits = $averageMonthlySales > 0
+            ? $this->roundUnits($averageMonthlySales / 30)
+            : 0.0;
+        $targetConsumptionUnits = $this->roundUnits($averageMonthlySales * $months);
 
         $activeBatches = ProductBatch::query()
             ->where('business_id', $businessId)
             ->where('product_id', $productId)
             ->where('status', 'active')
             ->where('remaining_quantity', '>', 0)
-            ->orderBy('expiry_date', 'asc')
-            ->get();
+            ->get()
+            ->sortBy(function (ProductBatch $batch) {
+                $hasNoExpiry = $batch->expiry_date === null ? 1 : 0;
+                $expiryTimestamp = $batch->expiry_date?->getTimestamp() ?? PHP_INT_MAX;
+
+                return [$hasNoExpiry, $expiryTimestamp, $batch->id];
+            })
+            ->values();
 
         $totalStock = (float) $activeBatches->sum('remaining_quantity');
 
         $monthsToStockOut = null;
-        if ($conservativeMonthlySales > 0) {
-            $monthsToStockOut = round($totalStock / $conservativeMonthlySales, 2);
+        if ($averageMonthlySales > 0) {
+            $monthsToStockOut = $this->roundUnits($totalStock / $averageMonthlySales);
         }
 
-        $batchSimulation = $activeBatches->map(function (ProductBatch $batch) use ($conservativeMonthlySales) {
-            $daysUntilExpiry = $batch->getDaysUntilExpiry();
-            $monthsUntilExpiry = $daysUntilExpiry === null
-                ? null
-                : max(0, round($daysUntilExpiry / 30, 2));
+        $batchSimulation = $this->buildBatchFefoSimulation($activeBatches, $dailyConsumptionUnits);
 
-            $projectedSellableUnits = 0.0;
-            if ($monthsUntilExpiry !== null && $conservativeMonthlySales > 0) {
-                $projectedSellableUnits = min(
-                    (float) $batch->remaining_quantity,
-                    round($conservativeMonthlySales * $monthsUntilExpiry, 2)
-                );
-            }
-
-            $potentiallyUnsoldUnits = max(0, (float) $batch->remaining_quantity - $projectedSellableUnits);
-
-            return [
-                'batch_id' => $batch->id,
-                'batch_number' => $batch->batch_number,
-                'expiry_date' => optional($batch->expiry_date)->format('Y-m-d'),
-                'days_until_expiry' => $daysUntilExpiry,
-                'remaining_units' => (float) $batch->remaining_quantity,
-                'projected_sellable_units' => round($projectedSellableUnits, 2),
-                'potentially_unsold_units' => round($potentiallyUnsoldUnits, 2),
-                'risk_level' => $this->resolveBatchRiskLevel($daysUntilExpiry, $potentiallyUnsoldUnits),
-            ];
-        })->values();
-
-        $potentiallyUnsoldUnits = round((float) $batchSimulation->sum('potentially_unsold_units'), 2);
+        $totalUsefulUnits = $this->roundUnits((float) $batchSimulation->sum('consumable_units'));
+        $potentiallyUnsoldUnits = $this->roundUnits((float) $batchSimulation->sum('potentially_unsold_units'));
+        $totalExcessDisplay = (int) round((float) $batchSimulation->sum(function (array $item) {
+            return max(0, (float) $item['excess_display_value']);
+        }));
+        $suggestedOrderUnits = $this->resolveSuggestedOrderUnits($targetConsumptionUnits, $totalUsefulUnits);
         $riskPercentage = $totalStock > 0
-            ? round(($potentiallyUnsoldUnits / $totalStock) * 100, 2)
+            ? $this->roundUnits(($potentiallyUnsoldUnits / $totalStock) * 100)
             : 0.0;
 
         $riskLevel = $this->resolveRiskLevel($riskPercentage);
@@ -90,18 +80,33 @@ class ProductRotationAnalyticsService
             'monthly_sales_units' => $monthlyUnits->map(function ($units, $month) {
                 return [
                     'month' => $month,
-                    'units' => round((float) $units, 2),
+                    'units' => $this->roundUnits((float) $units),
                 ];
             })->values(),
             'average_monthly_sales' => $averageMonthlySales,
             'conservative_monthly_sales' => $conservativeMonthlySales,
-            'total_stock_units' => round($totalStock, 2),
+            'daily_consumption_units' => $dailyConsumptionUnits,
+            'target_period_days' => $targetPeriodDays,
+            'target_consumption_units' => $targetConsumptionUnits,
+            'total_stock_units' => $this->roundUnits($totalStock),
+            'total_useful_units' => $totalUsefulUnits,
+            'total_excess_units' => $potentiallyUnsoldUnits,
+            'total_excess_display' => -$totalExcessDisplay,
+            'suggested_order_units' => $suggestedOrderUnits,
             'projected_stockout_months' => $monthsToStockOut,
             'expiry_risk_percentage' => $riskPercentage,
             'expiry_risk_level' => $riskLevel,
             'potentially_unsold_units' => $potentiallyUnsoldUnits,
             'batch_risk_simulation' => $batchSimulation,
-            'decision_summary' => $this->buildDecisionSummary($riskLevel, $monthsToStockOut, $conservativeMonthlySales, $totalStock),
+            'decision_summary' => $this->buildDecisionSummary(
+                $riskLevel,
+                $monthsToStockOut,
+                $averageMonthlySales,
+                $totalStock,
+                $totalUsefulUnits,
+                $suggestedOrderUnits,
+                $targetPeriodDays
+            ),
         ];
     }
 
@@ -192,14 +197,91 @@ class ProductRotationAnalyticsService
         return 'low';
     }
 
-    private function buildDecisionSummary(string $riskLevel, ?float $monthsToStockOut, float $conservativeMonthlySales, float $totalStock): string
+    private function buildBatchFefoSimulation(Collection $batches, float $dailyConsumptionUnits): Collection
+    {
+        $cumulativeConsumableUnits = 0.0;
+
+        return $batches->map(function (ProductBatch $batch) use ($dailyConsumptionUnits, &$cumulativeConsumableUnits) {
+            $daysUntilExpiry = $batch->getDaysUntilExpiry();
+            $stockUnits = (float) $batch->remaining_quantity;
+            $cumulativeConsumableBefore = $this->roundUnits($cumulativeConsumableUnits);
+            $daysConsumedBefore = $dailyConsumptionUnits > 0
+                ? $this->roundUnits($cumulativeConsumableBefore / $dailyConsumptionUnits)
+                : 0.0;
+
+            $effectiveDaysRemaining = 0.0;
+            if ($daysUntilExpiry !== null) {
+                $effectiveDaysRemaining = $this->roundUnits(max(0, $daysUntilExpiry - $daysConsumedBefore));
+            }
+
+            $projectedConsumableUnits = $dailyConsumptionUnits > 0
+                ? $this->roundUnits($effectiveDaysRemaining * $dailyConsumptionUnits)
+                : 0.0;
+
+            $consumableUnits = $this->roundUnits(min($stockUnits, $projectedConsumableUnits));
+            $potentiallyUnsoldUnits = $this->roundUnits(max(0, $stockUnits - $consumableUnits));
+            $excessDisplayValue = $potentiallyUnsoldUnits > 0
+                ? (float) round($potentiallyUnsoldUnits, 0)
+                : 0.0;
+
+            $cumulativeConsumableUnits = $this->roundUnits($cumulativeConsumableUnits + $consumableUnits);
+
+            return [
+                'batch_id' => $batch->id,
+                'batch_number' => $batch->batch_number,
+                'expiry_date' => optional($batch->expiry_date)->format('Y-m-d'),
+                'days_until_expiry' => $daysUntilExpiry,
+                'stock_units' => $this->roundUnits($stockUnits),
+                'remaining_units' => $this->roundUnits($stockUnits),
+                'cumulative_consumable_before' => $cumulativeConsumableBefore,
+                'days_consumed_before' => $daysConsumedBefore,
+                'effective_days_remaining' => $effectiveDaysRemaining,
+                'projected_consumable_units' => $projectedConsumableUnits,
+                'consumable_units' => $consumableUnits,
+                'projected_sellable_units' => $consumableUnits,
+                'potentially_unsold_units' => $potentiallyUnsoldUnits,
+                'excess_units' => $potentiallyUnsoldUnits,
+                'excess_display' => $potentiallyUnsoldUnits > 0 ? '-' . (string) ((int) $excessDisplayValue) : '--',
+                'excess_display_value' => $excessDisplayValue,
+                'risk_level' => $this->resolveBatchRiskLevel($daysUntilExpiry, $potentiallyUnsoldUnits),
+            ];
+        })->values();
+    }
+
+    private function resolveSuggestedOrderUnits(float $targetConsumptionUnits, float $totalUsefulUnits): int
+    {
+        if ($targetConsumptionUnits <= $totalUsefulUnits) {
+            return 0;
+        }
+
+        return (int) round($targetConsumptionUnits - $totalUsefulUnits, 0);
+    }
+
+    private function buildDecisionSummary(
+        string $riskLevel,
+        ?float $monthsToStockOut,
+        float $averageMonthlySales,
+        float $totalStock,
+        float $totalUsefulUnits,
+        int $suggestedOrderUnits,
+        int $targetPeriodDays
+    ): string
     {
         if ($totalStock <= 0) {
             return 'Sin stock activo para analizar.';
         }
 
-        if ($conservativeMonthlySales <= 0) {
+        if ($averageMonthlySales <= 0) {
             return 'Riesgo alto: sin rotacion reciente, considere promociones o ajustes de compra para evitar vencimientos.';
+        }
+
+        if ($suggestedOrderUnits > 0) {
+            return sprintf(
+                'La cobertura util proyectada es de %s unidades para %d dias. Se sugiere pedir %d unidades adicionales.',
+                number_format($totalUsefulUnits, 2, '.', ''),
+                $targetPeriodDays,
+                $suggestedOrderUnits
+            );
         }
 
         if ($riskLevel === 'high') {
@@ -215,5 +297,10 @@ class ProductRotationAnalyticsService
         }
 
         return 'Escenario saludable: mantener estrategia actual y monitoreo periodico.';
+    }
+
+    private function roundUnits(float $value): float
+    {
+        return round($value, 2);
     }
 }

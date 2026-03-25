@@ -20,33 +20,74 @@ class ProductRotationAnalyticsServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_calculates_average_projection_and_risk_for_product(): void
+    protected function tearDown(): void
     {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
+
+    public function test_it_builds_fefo_batch_simulation_like_the_excel_example(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 3, 25, 0, 0, 0));
+
         [$business, $product, $user] = $this->createBaseProductContext();
 
-        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->subMonths(2)->startOfMonth()->addDays(3), 30);
-        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->subMonths(1)->startOfMonth()->addDays(4), 20);
+        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->subMonths(2)->startOfMonth()->addDays(3), 10);
+        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->subMonths(1)->startOfMonth()->addDays(4), 10);
         $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->startOfMonth()->addDays(5), 10);
 
         ProductBatch::query()->create([
             'product_id' => $product->id,
             'business_id' => $business->id,
-            'batch_number' => 'LOT-A',
-            'quantity' => 100,
-            'remaining_quantity' => 100,
+            'batch_number' => 'LOT-01',
+            'quantity' => 9,
+            'remaining_quantity' => 9,
             'purchase_price' => 5,
-            'expiry_date' => Carbon::now()->addDays(60)->toDateString(),
+            'expiry_date' => Carbon::now()->addDays(55)->toDateString(),
             'status' => 'active',
         ]);
 
         ProductBatch::query()->create([
             'product_id' => $product->id,
             'business_id' => $business->id,
-            'batch_number' => 'LOT-B',
-            'quantity' => 20,
-            'remaining_quantity' => 20,
+            'batch_number' => 'LOT-02',
+            'quantity' => 100,
+            'remaining_quantity' => 100,
             'purchase_price' => 5,
-            'expiry_date' => Carbon::now()->addDays(10)->toDateString(),
+            'expiry_date' => Carbon::now()->addDays(65)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $business->id,
+            'batch_number' => 'LOT-03',
+            'quantity' => 200,
+            'remaining_quantity' => 200,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(75)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $business->id,
+            'batch_number' => 'LOT-04',
+            'quantity' => 3,
+            'remaining_quantity' => 3,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(90)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $business->id,
+            'batch_number' => 'LOT-05',
+            'quantity' => 4,
+            'remaining_quantity' => 4,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(120)->toDateString(),
             'status' => 'active',
         ]);
 
@@ -54,17 +95,33 @@ class ProductRotationAnalyticsServiceTest extends TestCase
         $result = $service->getProductAnalytics($business->id, $product->id, 3);
 
         $this->assertSame(3, $result['period_months']);
-        $this->assertEqualsWithDelta(20.00, $result['average_monthly_sales'], 0.01);
+        $this->assertEqualsWithDelta(10.00, $result['average_monthly_sales'], 0.01);
         $this->assertEqualsWithDelta(10.00, $result['conservative_monthly_sales'], 0.01);
-        $this->assertEqualsWithDelta(120.00, $result['total_stock_units'], 0.01);
-        $this->assertEqualsWithDelta(12.00, $result['projected_stockout_months'], 0.01);
+        $this->assertEqualsWithDelta(0.33, $result['daily_consumption_units'], 0.01);
+        $this->assertEquals(90, $result['target_period_days']);
+        $this->assertEqualsWithDelta(30.00, $result['target_consumption_units'], 0.01);
+        $this->assertEqualsWithDelta(316.00, $result['total_stock_units'], 0.01);
+        $this->assertEqualsWithDelta(31.75, $result['total_useful_units'], 0.01);
+        $this->assertEquals(0, $result['suggested_order_units']);
+        $this->assertEqualsWithDelta(31.60, $result['projected_stockout_months'], 0.01);
         $this->assertEquals('high', $result['expiry_risk_level']);
-        $this->assertGreaterThan(0, $result['potentially_unsold_units']);
-        $this->assertCount(2, $result['batch_risk_simulation']);
+        $this->assertEqualsWithDelta(284.25, $result['potentially_unsold_units'], 0.01);
+        $this->assertCount(5, $result['batch_risk_simulation']);
+
+        $this->assertSame('-50', $result['batch_risk_simulation'][0]['excess_display']);
+        $this->assertEqualsWithDelta(9.00, $result['batch_risk_simulation'][0]['consumable_units'], 0.01);
+        $this->assertEqualsWithDelta(12.45, $result['batch_risk_simulation'][1]['consumable_units'], 0.01);
+        $this->assertSame('-88', $result['batch_risk_simulation'][1]['excess_display']);
+        $this->assertEqualsWithDelta(3.30, $result['batch_risk_simulation'][2]['consumable_units'], 0.01);
+        $this->assertSame('-197', $result['batch_risk_simulation'][2]['excess_display']);
+        $this->assertEqualsWithDelta(3.00, $result['batch_risk_simulation'][3]['consumable_units'], 0.01);
+        $this->assertEqualsWithDelta(4.00, $result['batch_risk_simulation'][4]['consumable_units'], 0.01);
     }
 
     public function test_it_marks_as_not_projectable_when_there_are_no_recent_sales(): void
     {
+        Carbon::setTestNow(Carbon::create(2026, 3, 25, 0, 0, 0));
+
         [$business, $product] = $this->createBaseProductContext();
 
         ProductBatch::query()->create([
@@ -83,9 +140,54 @@ class ProductRotationAnalyticsServiceTest extends TestCase
 
         $this->assertEqualsWithDelta(0.00, $result['average_monthly_sales'], 0.01);
         $this->assertEqualsWithDelta(0.00, $result['conservative_monthly_sales'], 0.01);
+        $this->assertEqualsWithDelta(0.00, $result['daily_consumption_units'], 0.01);
+        $this->assertEqualsWithDelta(0.00, $result['target_consumption_units'], 0.01);
+        $this->assertEqualsWithDelta(0.00, $result['total_useful_units'], 0.01);
+        $this->assertSame('--', $result['batch_risk_simulation'][0]['excess_display']);
+        $this->assertEquals(0, $result['suggested_order_units']);
         $this->assertNull($result['projected_stockout_months']);
         $this->assertEqualsWithDelta(50.00, $result['potentially_unsold_units'], 0.01);
         $this->assertEquals('high', $result['expiry_risk_level']);
+    }
+
+    public function test_it_calculates_positive_suggested_order_when_useful_stock_is_short(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 3, 25, 0, 0, 0));
+
+        [$business, $product, $user] = $this->createBaseProductContext();
+
+        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->subMonths(2)->startOfMonth()->addDays(3), 10);
+        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->subMonths(1)->startOfMonth()->addDays(4), 10);
+        $this->createSaleWithUnits($business->id, $user->id, $product->id, Carbon::now()->startOfMonth()->addDays(5), 10);
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $business->id,
+            'batch_number' => 'LOT-01',
+            'quantity' => 9,
+            'remaining_quantity' => 9,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(55)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $business->id,
+            'batch_number' => 'LOT-02',
+            'quantity' => 100,
+            'remaining_quantity' => 100,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(65)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $service = app(ProductRotationAnalyticsService::class);
+        $result = $service->getProductAnalytics($business->id, $product->id, 3);
+
+        $this->assertEqualsWithDelta(21.45, $result['total_useful_units'], 0.01);
+        $this->assertEquals(9, $result['suggested_order_units']);
+        $this->assertStringContainsString('Se sugiere pedir 9 unidades adicionales.', $result['decision_summary']);
     }
 
     private function createBaseProductContext(): array
