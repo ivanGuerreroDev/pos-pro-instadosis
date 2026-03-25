@@ -108,7 +108,7 @@ class ProductRotationAnalyticsServiceTest extends TestCase
         $this->assertEqualsWithDelta(284.25, $result['potentially_unsold_units'], 0.01);
         $this->assertCount(5, $result['batch_risk_simulation']);
 
-        $this->assertSame('-50', $result['batch_risk_simulation'][0]['excess_display']);
+        $this->assertSame('--', $result['batch_risk_simulation'][0]['excess_display']);
         $this->assertEqualsWithDelta(9.00, $result['batch_risk_simulation'][0]['consumable_units'], 0.01);
         $this->assertEqualsWithDelta(12.45, $result['batch_risk_simulation'][1]['consumable_units'], 0.01);
         $this->assertSame('-88', $result['batch_risk_simulation'][1]['excess_display']);
@@ -143,7 +143,7 @@ class ProductRotationAnalyticsServiceTest extends TestCase
         $this->assertEqualsWithDelta(0.00, $result['daily_consumption_units'], 0.01);
         $this->assertEqualsWithDelta(0.00, $result['target_consumption_units'], 0.01);
         $this->assertEqualsWithDelta(0.00, $result['total_useful_units'], 0.01);
-        $this->assertSame('--', $result['batch_risk_simulation'][0]['excess_display']);
+        $this->assertSame('-50', $result['batch_risk_simulation'][0]['excess_display']);
         $this->assertEquals(0, $result['suggested_order_units']);
         $this->assertNull($result['projected_stockout_months']);
         $this->assertEqualsWithDelta(50.00, $result['potentially_unsold_units'], 0.01);

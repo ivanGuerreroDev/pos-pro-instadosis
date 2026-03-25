@@ -7,11 +7,20 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private function shouldSkipEnumAlter(): bool
+    {
+        return DB::connection()->getDriverName() === 'sqlite';
+    }
+
     /**
      * Run the migrations.
      */
     public function up(): void
     {
+        if ($this->shouldSkipEnumAlter()) {
+            return;
+        }
+
         // Modificar el enum para agregar 'out_of_stock'
         DB::statement("ALTER TABLE expired_batches_notifications MODIFY COLUMN notification_type ENUM('near_expiry', 'expired', 'out_of_stock')");
     }
@@ -25,6 +34,10 @@ return new class extends Migration
         DB::table('expired_batches_notifications')
             ->where('notification_type', 'out_of_stock')
             ->delete();
+
+        if ($this->shouldSkipEnumAlter()) {
+            return;
+        }
             
         // Revertir el enum a su estado anterior
         DB::statement("ALTER TABLE expired_batches_notifications MODIFY COLUMN notification_type ENUM('near_expiry', 'expired')");
