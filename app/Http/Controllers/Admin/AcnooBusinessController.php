@@ -116,6 +116,7 @@ class AcnooBusinessController extends Controller
                 'business_category_id' => $request->business_category_id,
                 'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl') : NULL,
                 'user_id' => $user->id,
+                'billing_status' => Business::BILLING_STATUS_PENDING,
             ]);
 
             User::create([
@@ -127,6 +128,7 @@ class AcnooBusinessController extends Controller
                 'password' => Hash::make($request->password),
                 'user_id' => $user->id,
                 'lang' => 'en',
+                'status' => Business::BILLING_STATUS_PENDING,
             ]);
 
             if ($request->plan_subscribe_id) {
@@ -224,13 +226,22 @@ class AcnooBusinessController extends Controller
             'ddistr' => 'nullable|string',
             'dprov' => 'nullable|string',
             'dtfnEm' => 'nullable|string',
-            'dcorElectEmi' => 'nullable|email'
+            'dcorElectEmi' => 'nullable|email',
+            'billing_status' => 'nullable|in:' . Business::BILLING_STATUS_PENDING . ',' . Business::BILLING_STATUS_ACTIVE,
+            'emagic_api_key' => 'nullable|string|min:20',
         ]);
 
         DB::beginTransaction();
 
         try {
             $business = Business::findOrFail($id);
+            $newBillingStatus = $request->input('billing_status', $business->billing_status ?? Business::BILLING_STATUS_PENDING);
+
+            if ($newBillingStatus === Business::BILLING_STATUS_ACTIVE && !$request->filled('emagic_api_key') && empty($business->emagic_api_key)) {
+                return response()->json([
+                    'message' => __('EMAGIC API key is required to activate billing.'),
+                ], 422);
+            }
 
             $business->update([
                 'companyName' => $request->companyName,
@@ -239,6 +250,9 @@ class AcnooBusinessController extends Controller
                 'shopOpeningBalance' => $request->shopOpeningBalance,
                 'business_category_id' => $request->business_category_id,
                 'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl', $business->pictureUrl) : $business->pictureUrl,
+                'emagic_api_key' => $request->filled('emagic_api_key') ? $request->emagic_api_key : $business->emagic_api_key,
+                'billing_status' => $newBillingStatus,
+                'billing_linked_at' => $newBillingStatus === Business::BILLING_STATUS_ACTIVE ? now() : null,
             ]);
 
             $user = User::where('business_id', $business->id)->firstOrFail();
@@ -248,7 +262,14 @@ class AcnooBusinessController extends Controller
                 'phone' => $request->phoneNumber,
                 'image' => $request->pictureUrl ? $this->upload($request, 'pictureUrl') : $user->image,
                 'password' => $request->password ? Hash::make($request->password) : $user->password,
+                'status' => $newBillingStatus,
             ]);
+
+            User::where('business_id', $business->id)
+                ->where('id', '!=', $user->id)
+                ->update([
+                    'status' => $newBillingStatus,
+                ]);
 
             if ($request->plan_subscribe_id) {
                 $plan = Plan::findOrFail($request->plan_subscribe_id);
@@ -311,6 +332,37 @@ class AcnooBusinessController extends Controller
         return response()->json([
             'message'   => __('Selected Business deleted successfully'),
             'redirect'  => route('admin.business.index')
+        ]);
+    }
+
+    public function status(Request $request, $id)
+    {
+        $request->validate([
+            'billing_status' => 'required|in:' . Business::BILLING_STATUS_PENDING . ',' . Business::BILLING_STATUS_ACTIVE,
+            'emagic_api_key' => 'nullable|string|min:20',
+        ]);
+
+        $business = Business::findOrFail($id);
+
+        if ($request->billing_status === Business::BILLING_STATUS_ACTIVE && !$request->filled('emagic_api_key') && empty($business->emagic_api_key)) {
+            return response()->json([
+                'message' => __('EMAGIC API key is required to activate billing.'),
+            ], 422);
+        }
+
+        $business->update([
+            'billing_status' => $request->billing_status,
+            'emagic_api_key' => $request->filled('emagic_api_key') ? $request->emagic_api_key : $business->emagic_api_key,
+            'billing_linked_at' => $request->billing_status === Business::BILLING_STATUS_ACTIVE ? now() : null,
+        ]);
+
+        User::where('business_id', $business->id)
+            ->update([
+                'status' => $request->billing_status,
+            ]);
+
+        return response()->json([
+            'message' => __('Business billing status updated successfully.'),
         ]);
     }
 

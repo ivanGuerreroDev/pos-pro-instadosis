@@ -17,6 +17,26 @@ use Illuminate\Support\Facades\DB;
 
 class AcnooSaleController extends Controller
 {
+    protected function ensureBillingLinkedOrFail()
+    {
+        $business = Business::select('id', 'billing_status', 'emagic_api_key')->find(auth()->user()->business_id);
+
+        if (!$business) {
+            return response()->json([
+                'message' => __('Business not found.'),
+            ], 404);
+        }
+
+        if ($business->billing_status === Business::BILLING_STATUS_PENDING) {
+            return response()->json([
+                'message' => __('Billing integration is pending. Please contact admin to link EMAGIC before invoicing.'),
+                'billing_status' => Business::BILLING_STATUS_PENDING,
+            ], 403);
+        }
+
+        return null;
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -46,6 +66,11 @@ class AcnooSaleController extends Controller
         BatchService $batchService
     )
     {
+        $guardResponse = $this->ensureBillingLinkedOrFail();
+        if ($guardResponse) {
+            return $guardResponse;
+        }
+
         $request->validate([
             'products' => 'required|array',
             'products.*.product_id' => 'required|exists:products,id',
@@ -246,6 +271,11 @@ class AcnooSaleController extends Controller
      */
     public function getPdf(Request $request, BillingService $billingService)
     {
+        $guardResponse = $this->ensureBillingLinkedOrFail();
+        if ($guardResponse) {
+            return $guardResponse;
+        }
+
         $request->validate([
             'sale_id' => 'required|exists:sales,id',
         ]);
@@ -291,6 +321,11 @@ class AcnooSaleController extends Controller
      */
     public function update(Request $request, Sale $sale, BillingService $billingService)
     {
+        $guardResponse = $this->ensureBillingLinkedOrFail();
+        if ($guardResponse) {
+            return $guardResponse;
+        }
+
         $request->validate([
             'products' => 'required|array',
             'party_id' => 'nullable|exists:parties,id',

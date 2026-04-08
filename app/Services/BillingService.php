@@ -23,6 +23,15 @@ class BillingService
     protected $httpConnectTimeout;
     protected $httpTimeout;
 
+    protected function resolveApiKeyForSale(Sale $sale): ?string
+    {
+        $business = Business::select('id', 'emagic_api_key')->find($sale->business_id);
+        if (!empty($business?->emagic_api_key)) {
+            return $business->emagic_api_key;
+        }
+
+        return $this->apiKey;
+    }
     protected function isLiveMode(): bool
     {
         $mode = strtolower((string) $this->mode);
@@ -62,10 +71,19 @@ class BillingService
     {
         try {
             $jsonData = $this->formatSaleDataForBilling($sale, $party);
+            $apiKey = $this->resolveApiKeyForSale($sale);
+
+            if (empty($apiKey)) {
+                return [
+                    'success' => false,
+                    'message' => 'Missing EMAGIC API key for business',
+                    'error' => 'missing_emagic_api_key'
+                ];
+            }
             
             // Send data to external billing API with EMAGIC_API_KEY header
                         $response = Http::withHeaders([
-                                'Ocp-Apim-Subscription-Key' => $this->apiKey
+                                'Ocp-Apim-Subscription-Key' => $apiKey
                         ])->connectTimeout($this->httpConnectTimeout)
                             ->timeout($this->httpTimeout)
                             ->post($this->apiUrl."/facturar/v1.1/autorizar", $jsonData);
@@ -348,6 +366,19 @@ class BillingService
      */
     public function getBillingPdfFile($saleId)
     {
+        $sale = Sale::find($saleId);
+        if (!$sale) {
+            return null;
+        }
+
+        $apiKey = $this->resolveApiKeyForSale($sale);
+        if (empty($apiKey)) {
+            Log::warning('Billing PDF Error: missing EMAGIC API key', [
+                'sale_id' => $saleId,
+            ]);
+            return null;
+        }
+
         // Get the dgi_invoice record
         $dgiInvoice = DB::table('dgi_invoice')->where('sale_id', $saleId)->first();
 
@@ -421,7 +452,7 @@ class BillingService
             // Realiza la solicitud con el encabezado requerido
             try {
                 $response = Http::withHeaders([
-                    'Ocp-Apim-Subscription-Key' => $this->apiKey
+                    'Ocp-Apim-Subscription-Key' => $apiKey
                 ])->connectTimeout($this->httpConnectTimeout)
                   ->timeout($this->httpTimeout)
                   ->get($url);

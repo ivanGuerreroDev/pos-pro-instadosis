@@ -22,6 +22,7 @@ class User extends Authenticatable
         'business_id',
         'name',
         'role',
+        'status',
         'email',
         'phone',
         'image',

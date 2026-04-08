@@ -95,6 +95,7 @@ class AuthController extends Controller
                 return response()->json([
                     'message' => 'Logged In successfully!',
                     'is_setup' => $is_setup,
+                    'billing_status' => $user->status,
                     'token' => $token,
                 ]);
 
@@ -159,6 +160,7 @@ class AuthController extends Controller
                 'data' => [
                     'message' => 'Logged In successfully!',
                     'is_setup' => $user->business_id ? true : false,
+                    'billing_status' => $user->status,
                     'token' => $user->createToken('createToken')->plainTextToken,
                 ],
             ]);

@@ -18,7 +18,7 @@ class BusinessController extends Controller
 
     public function index()
     {
-        $user = User::select('id', 'name', 'role', 'visibility', 'lang', 'email')->findOrFail(auth()->id());
+        $user = User::select('id', 'name', 'role', 'status', 'visibility', 'lang', 'email')->findOrFail(auth()->id());
         $business = Business::with('category:id,name', 'enrolled_plan:id,plan_id,business_id,price,duration', 'enrolled_plan.plan:id,subscriptionName')->findOrFail(auth()->user()->business_id);
 
         $data = array_merge($business->toArray(), ['user' => $user->toArray()]);
@@ -59,7 +59,8 @@ class BusinessController extends Controller
                 'phoneNumber' => $request->phoneNumber,
                 'subscriptionDate' => $free_plan ? now() : NULL,
                 'will_expire' => now()->addDays($free_plan->duration),
-                'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl') : NULL
+                'pictureUrl' => $request->pictureUrl ? $this->upload($request, 'pictureUrl') : NULL,
+                'billing_status' => Business::BILLING_STATUS_PENDING,
             ]);
 
             // Create invoice data
@@ -74,6 +75,7 @@ class BusinessController extends Controller
                 'business_id' => $business->id,
                 'phone' => $request->phoneNumber,
                 'name' => $business->companyName,
+                'status' => Business::BILLING_STATUS_PENDING,
             ]);
 
             if ($free_plan) {
@@ -91,6 +93,7 @@ class BusinessController extends Controller
             DB::commit();
             return response()->json([
                 'message' => __('Business setup completed.'),
+                'billing_status' => $business->billing_status,
             ]);
 
         } catch (\Throwable $th) {

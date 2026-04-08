@@ -96,6 +96,27 @@
                                 
                             </div>
                         </div>
+                        <h5 class="mt-5">{{ __('Billing Linking') }}</h5>
+                        <div class="add-suplier-modal-wrapper d-block mb-4">
+                            <div class="row">
+                                <div class="col-lg-6 mb-2">
+                                    <label>{{ __('Billing Status') }}</label>
+                                    <div class="gpt-up-down-arrow position-relative">
+                                        <select name="billing_status" class="form-control">
+                                            <option value="pending_billing_linking" @selected($business->billing_status === 'pending_billing_linking')>{{ __('Pending Billing Linking') }}</option>
+                                            <option value="active" @selected($business->billing_status === 'active')>{{ __('Active') }}</option>
+                                        </select>
+                                        <span></span>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-6 mb-2">
+                                    <label>{{ __('EMAGIC API Key') }}</label>
+                                    <input type="text" name="emagic_api_key" class="form-control" value="{{ $business->emagic_api_key }}" placeholder="{{ __('Enter EMAGIC API key') }}">
+                                    <small class="text-muted">{{ __('Leave blank to keep current key.') }}</small>
+                                </div>
+                            </div>
+                        </div>
                         <h5 class="mt-5">{{ __('Invoice Information') }}</h5>
                         <div class="add-suplier-modal-wrapper d-block">
                             <div class="row">

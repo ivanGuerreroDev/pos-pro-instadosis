@@ -11,6 +11,9 @@ class Business extends Model
 {
     use HasFactory;
 
+    public const BILLING_STATUS_PENDING = 'pending_billing_linking';
+    public const BILLING_STATUS_ACTIVE = 'active';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -26,7 +29,14 @@ class Business extends Model
         'will_expire',
         'subscriptionDate',
         'remainingShopBalance',
-        'shopOpeningBalance'
+        'shopOpeningBalance',
+        'emagic_api_key',
+        'billing_status',
+        'billing_linked_at',
+    ];
+
+    protected $casts = [
+        'billing_linked_at' => 'datetime',
     ];
 
     public function invoice_data(): HasOne
@@ -43,6 +53,11 @@ class Business extends Model
     public function category()
     {
         return $this->belongsTo(BusinessCategory::class, 'business_category_id');
+    }
+
+    public function isBillingLinked(): bool
+    {
+        return $this->billing_status === self::BILLING_STATUS_ACTIVE && !empty($this->emagic_api_key);
     }
 
 }

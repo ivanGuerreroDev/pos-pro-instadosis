@@ -17,8 +17,8 @@ services:
         depends_on:
             - db
         ports:
-            - "8000:8000"
-            - "5173:5173"
+            - "8011:8000"
+            - "5183:5173"
         environment:
             DB_HOST: db
             DB_PORT: 3306
@@ -42,14 +42,14 @@ services:
         networks:
             - pos-network
         ports:
-            - "3306:3306"
+            - "3307:3306"
 
     nginx:
         image: nginx:alpine
         container_name: pos-pro-instadosis-nginx
         restart: unless-stopped
         ports:
-            - "8080:80"
+            - "8088:80"
         volumes:
             - ./:/var/www
             - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
