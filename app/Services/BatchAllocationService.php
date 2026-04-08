@@ -69,6 +69,10 @@ class BatchAllocationService
                 continue;
             }
 
+            if ($batch->isExpired()) {
+                throw new \Exception("Batch {$batch->batch_number} is expired");
+            }
+
             $quantityToAllocate = min(
                 $item['quantity'],
                 $batch->remaining_quantity,
