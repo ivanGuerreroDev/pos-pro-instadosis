@@ -14,12 +14,19 @@ use App\Services\BatchAllocationService;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AcnooSaleController extends Controller
 {
     protected function ensureBillingLinkedOrFail()
     {
-        $business = Business::select('id', 'billing_status', 'emagic_api_key')->find(auth()->user()->business_id);
+        $selectColumns = ['id', 'emagic_api_key'];
+        $hasBillingStatus = Schema::hasColumn('businesses', 'billing_status');
+        if ($hasBillingStatus) {
+            $selectColumns[] = 'billing_status';
+        }
+
+        $business = Business::select($selectColumns)->find(auth()->user()->business_id);
 
         if (!$business) {
             return response()->json([
@@ -27,7 +34,7 @@ class AcnooSaleController extends Controller
             ], 404);
         }
 
-        if ($business->billing_status === Business::BILLING_STATUS_PENDING) {
+        if ($hasBillingStatus && $business->billing_status === Business::BILLING_STATUS_PENDING) {
             return response()->json([
                 'message' => __('Billing integration is pending. Please contact admin to link EMAGIC before invoicing.'),
                 'billing_status' => Business::BILLING_STATUS_PENDING,
