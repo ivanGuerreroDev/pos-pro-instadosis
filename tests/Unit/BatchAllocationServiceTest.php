@@ -90,6 +90,56 @@ class BatchAllocationServiceTest extends TestCase
         $this->assertSame(3, (int) $allocation[0]['quantity']);
     }
 
+    public function test_fefo_allocation_prioritizes_closest_non_expired_batch(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 4, 8, 0, 0, 0));
+
+        [$product] = $this->createProductContext();
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $product->business_id,
+            'batch_number' => 'EXP-001',
+            'quantity' => 10,
+            'remaining_quantity' => 10,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->subDay()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $nearBatch = ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $product->business_id,
+            'batch_number' => 'NEAR-001',
+            'quantity' => 5,
+            'remaining_quantity' => 5,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(10)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $nextBatch = ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'business_id' => $product->business_id,
+            'batch_number' => 'NEXT-001',
+            'quantity' => 10,
+            'remaining_quantity' => 10,
+            'purchase_price' => 5,
+            'expiry_date' => Carbon::now()->addDays(20)->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $service = app(BatchAllocationService::class);
+
+        $allocation = $service->allocateBatchesForSale($product->id, 8);
+
+        $this->assertCount(2, $allocation);
+        $this->assertSame($nearBatch->id, $allocation[0]['batch_id']);
+        $this->assertSame(5, (int) $allocation[0]['quantity']);
+        $this->assertSame($nextBatch->id, $allocation[1]['batch_id']);
+        $this->assertSame(3, (int) $allocation[1]['quantity']);
+    }
+
     private function createProductContext(): array
     {
         $businessCategory = BusinessCategory::query()->create([
