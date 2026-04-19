@@ -294,7 +294,7 @@ class BillingService
         $party = $sale->party_id ? Party::findOrFail($sale->party_id) : $party;
         $partyInvoiceData = $party ? $sale->party_id ? $party->invoice_data : $party["invoice_data"] : null;
         // Get the sale details with products
-        $saleDetails = SaleDetails::with('product')->where('sale_id', $sale->id)->get();
+        $saleDetails = SaleDetails::with(['product', 'batchSaleDetails.batch'])->where('sale_id', $sale->id)->get();
         $invoiceNumber = explode('-', $sale->invoiceNumber);
         $invoiceNumber = $invoiceNumber[1];
         // convert $partyInvoiceData from array to object with properties
@@ -452,13 +452,75 @@ class BillingService
         }
         
         // Add items to the gitem array
-        foreach ($saleDetails as $index => $detail) {
+        $detailSequence = 1;
+        foreach ($saleDetails as $detail) {
             $product = $detail->product;
             $quantity = max((float) $detail->quantities, 1.0);
             $lineSubtotal = (float) ($detail->subtotal ?? ((float) $detail->price * $quantity));
             $vatAmount = (float) ($detail->tax_amount ?? 0);
             $lineTotal = (float) ($detail->total ?? ($lineSubtotal + $vatAmount));
             $unitNetPrice = $lineSubtotal / $quantity;
+
+            $isMedicineByBatch = (int) ($product->is_medicine ?? 0) === 1
+                && (int) ($product->track_by_batches ?? 0) === 1
+                && $detail->batchSaleDetails
+                && $detail->batchSaleDetails->isNotEmpty();
+
+            if ($isMedicineByBatch) {
+                $allocatedQty = max((float) $detail->batchSaleDetails->sum('quantity'), 1.0);
+                $remainingSubtotal = $lineSubtotal;
+                $remainingVat = $vatAmount;
+                $remainingTotal = $lineTotal;
+                $batchCount = $detail->batchSaleDetails->count();
+
+                foreach ($detail->batchSaleDetails as $batchIdx => $batchSaleDetail) {
+                    $batchQty = max((float) $batchSaleDetail->quantity, 0.0);
+                    if ($batchQty <= 0) {
+                        continue;
+                    }
+
+                    if ($batchIdx === $batchCount - 1) {
+                        $batchSubtotal = $remainingSubtotal;
+                        $batchVat = $remainingVat;
+                        $batchTotal = $remainingTotal;
+                    } else {
+                        $ratio = $batchQty / $allocatedQty;
+                        $batchSubtotal = round($lineSubtotal * $ratio, 6);
+                        $batchVat = round($vatAmount * $ratio, 6);
+                        $batchTotal = round($lineTotal * $ratio, 2);
+                        $remainingSubtotal -= $batchSubtotal;
+                        $remainingVat -= $batchVat;
+                        $remainingTotal -= $batchTotal;
+                    }
+
+                    $lotNumber = $batchSaleDetail->batch->batch_number ?? ('LOTE-' . $batchSaleDetail->batch_id);
+
+                    $formattedData['gitem'][] = [
+                        'gitbmsitem' => [
+                            'dtasaITBMS' => '01', // Standard rate
+                            'dvalITBMS' => $this->asNumber($batchVat, 6)
+                        ],
+                        'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
+                        'cunidad' => 'UND',
+                        'ddescProd' => $product->productName,
+                        'dcantCodInt' => $this->asNumber($batchQty, 2),
+                        'gprecios' => [
+                            'dprItem' => $this->asNumber($batchSubtotal, 6),
+                            'dprUnit' => $this->asNumber($unitNetPrice, 6),
+                            'dvalTotItem' => $this->asNumber($batchTotal, 2)
+                        ],
+                        'gmedicina' => [
+                            'dnroLote' => (string) $lotNumber,
+                            'dctLote' => $this->asNumber($batchQty, 2),
+                        ],
+                        'dsecItem' => $detailSequence,
+                    ];
+
+                    $detailSequence++;
+                }
+
+                continue;
+            }
             
             $formattedData['gitem'][] = [
                 'gitbmsitem' => [
@@ -474,8 +536,10 @@ class BillingService
                     'dprUnit' => $this->asNumber($unitNetPrice, 6),
                     'dvalTotItem' => $this->asNumber($lineTotal, 2)
                 ],
-                'dsecItem' => $index + 1
+                'dsecItem' => $detailSequence
             ];
+
+            $detailSequence++;
         }
         
         // Add purchase order information if available

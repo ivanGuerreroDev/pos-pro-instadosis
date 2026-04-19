@@ -6,6 +6,7 @@ EMAIL="${EMAIL:-shop-owner@shop-owner.com}"
 PASSWORD="${PASSWORD:-123456}"
 BUSINESS_ID="${BUSINESS_ID:-4}"
 API_KEY="${API_KEY:-2423098a70f3496d8e8a9d5f8b582034}"
+E2E_MEDICINE_BATCH="${E2E_MEDICINE_BATCH:-0}"
 
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -52,6 +53,23 @@ INSERT INTO products (productName,business_id,unit_id,brand_id,category_id,produ
 SELECT 'Producto E2E EMAGIC',${BUSINESS_ID},(SELECT id FROM units WHERE business_id=${BUSINESS_ID} AND unitName='Unidad' LIMIT 1),(SELECT id FROM brands WHERE business_id=${BUSINESS_ID} AND brandName='QA Marca' LIMIT 1),(SELECT id FROM categories WHERE business_id=${BUSINESS_ID} AND categoryName='QA Categoria' LIMIT 1),CONCAT('E2E-',DATE_FORMAT(NOW(),'%Y%m%d%H%i%s')),NULL,12.00,10.00,15.00,15.00,50,NULL,NULL,NULL,NULL,NULL,'QA Labs',NULL,0,1,'7',NOW(),NOW() FROM DUAL \
 WHERE NOT EXISTS (SELECT 1 FROM products WHERE business_id=${BUSINESS_ID} AND productName='Producto E2E EMAGIC');"
 
+if [[ "$E2E_MEDICINE_BATCH" == "1" ]]; then
+  echo "[INFO] Configure product as medicine tracked by batches"
+  run_sql "USE laravel; \
+  UPDATE products SET is_medicine=1, track_by_batches=1, tax_rate='7', productStock=0, updated_at=NOW() WHERE business_id=${BUSINESS_ID} AND productName='Producto E2E EMAGIC'; \
+  INSERT INTO product_batches (product_id,business_id,batch_number,quantity,remaining_quantity,purchase_price,manufacture_date,expiry_date,status,notes,created_at,updated_at) \
+  SELECT p.id,${BUSINESS_ID},'E2E-LOTE-001',200,200,10.00,CURDATE(),DATE_ADD(CURDATE(), INTERVAL 365 DAY),'active','Lote QA E2E',NOW(),NOW() \
+  FROM products p \
+  WHERE p.business_id=${BUSINESS_ID} AND p.productName='Producto E2E EMAGIC' \
+    AND NOT EXISTS (SELECT 1 FROM product_batches pb WHERE pb.product_id=p.id AND pb.batch_number='E2E-LOTE-001'); \
+  UPDATE product_batches pb \
+  JOIN products p ON p.id=pb.product_id \
+  SET pb.status='active', pb.remaining_quantity=GREATEST(pb.remaining_quantity, 200), pb.quantity=GREATEST(pb.quantity, 200), pb.expiry_date=DATE_ADD(CURDATE(), INTERVAL 365 DAY), pb.updated_at=NOW() \
+  WHERE p.business_id=${BUSINESS_ID} AND p.productName='Producto E2E EMAGIC' AND pb.batch_number='E2E-LOTE-001';"
+else
+  run_sql "USE laravel; UPDATE products SET is_medicine=0, track_by_batches=0, tax_rate='7', productStock=100, updated_at=NOW() WHERE business_id=${BUSINESS_ID} AND productName='Producto E2E EMAGIC';"
+fi
+
 PARTY_ID="$(run_sql "USE laravel; SELECT id FROM parties WHERE business_id=${BUSINESS_ID} AND phone='60009999' ORDER BY id DESC LIMIT 1;")"
 PRODUCT_ID="$(run_sql "USE laravel; SELECT id FROM products WHERE business_id=${BUSINESS_ID} AND productName='Producto E2E EMAGIC' ORDER BY id DESC LIMIT 1;")"
 [[ -n "$PARTY_ID" ]] || fail "No se encontro party para la prueba"
@@ -70,10 +88,10 @@ cat > "$SALE_PAYLOAD_FILE" <<JSON
   "customer_name": "Cliente E2E QA",
   "customer_phone": "60009999",
   "saleDate": "2026-04-16",
-  "totalAmount": 30,
+  "totalAmount": 32.1,
   "discountAmount": 0,
   "dueAmount": 0,
-  "paidAmount": 30,
+  "paidAmount": 32.1,
   "vat_amount": 2.1,
   "vat_percent": 7,
   "isPaid": true,
