@@ -54,6 +54,47 @@ class BillingService
 
         return $this->apiKey;
     }
+
+    protected function buildCompatibilityPayload(array $payload): array
+    {
+        // Some eMagic validations treat nullable fields as required.
+        if (isset($payload['gdgen']) && is_array($payload['gdgen'])) {
+            $payload['gdgen']['dseg'] = $payload['gdgen']['dseg'] ?? '0.00';
+
+            $idest = (int) ($payload['gdgen']['idest'] ?? 1);
+            if ($idest === 2) {
+                $payload['gdgen']['gfexp'] = $payload['gdgen']['gfexp'] ?? (object) [];
+            } else {
+                unset($payload['gdgen']['gfexp']);
+            }
+
+            $idoc = (string) ($payload['gdgen']['idoc'] ?? '01');
+            if (in_array($idoc, ['04', '05'], true)) {
+                $payload['gdgen']['gdfref'] = $payload['gdgen']['gdfref'] ?? [];
+            } else {
+                unset($payload['gdgen']['gdfref']);
+            }
+        }
+
+        if (isset($payload['gtot']['gformaPago'][0]) && is_array($payload['gtot']['gformaPago'][0])) {
+            $formaPago = (string) ($payload['gtot']['gformaPago'][0]['iformaPago'] ?? '');
+            if ($formaPago === '99') {
+                $payload['gtot']['gformaPago'][0]['dformaPagoDesc'] = $payload['gtot']['gformaPago'][0]['dformaPagoDesc'] ?? 'OTROS';
+            } else {
+                unset($payload['gtot']['gformaPago'][0]['dformaPagoDesc']);
+            }
+        }
+
+        if (isset($payload['gitem']) && is_array($payload['gitem'])) {
+            foreach ($payload['gitem'] as $idx => $item) {
+                if (is_array($item) && (!array_key_exists('cunidadCPBS', $item) || $item['cunidadCPBS'] === null)) {
+                    $payload['gitem'][$idx]['cunidadCPBS'] = 'UND';
+                }
+            }
+        }
+
+        return $payload;
+    }
     protected function isLiveMode(): bool
     {
         $mode = strtolower((string) $this->mode);
@@ -92,7 +133,9 @@ class BillingService
     public function sendSaleToExternalBilling(Sale $sale, $party = null)
     {
         try {
-            $jsonData = $this->removeNullValues($this->formatSaleDataForBilling($sale, $party));
+            // eMagic validation is schema-sensitive; keep explicit nullable keys
+            // instead of dropping them, to preserve the expected payload shape.
+            $jsonData = $this->formatSaleDataForBilling($sale, $party);
             $apiKey = $this->resolveApiKeyForSale($sale);
 
             if (empty($apiKey)) {
@@ -103,7 +146,7 @@ class BillingService
                 ];
             }
             
-            // Send data to external billing API with EMAGIC_API_KEY header
+                        // Send data to external billing API with EMAGIC_API_KEY header
                         $response = Http::withHeaders([
                                 'Ocp-Apim-Subscription-Key' => $apiKey
                         ])->connectTimeout($this->httpConnectTimeout)
@@ -123,6 +166,31 @@ class BillingService
                 'headers' => $response->headers(),
                 'body' => $response->json()
             ]);
+
+            // Retry once with compatibility defaults when provider reports null required fields.
+            if (!$response->successful()) {
+                $responseBody = (string) $response->body();
+                if (stripos($responseBody, 'campos obligatorios como nulos') !== false) {
+                    $compatPayload = $this->buildCompatibilityPayload($jsonData);
+
+                    Log::warning('Billing API Retry with compatibility payload', [
+                        'sale_id' => $sale->id,
+                    ]);
+
+                    $response = Http::withHeaders([
+                        'Ocp-Apim-Subscription-Key' => $apiKey
+                    ])->connectTimeout($this->httpConnectTimeout)
+                      ->timeout($this->httpTimeout)
+                      ->post($this->apiUrl."/facturar/v1.1/autorizar", $compatPayload);
+
+                    Log::debug('Billing API Retry Response', [
+                        'sale_id' => $sale->id,
+                        'status' => $response->status(),
+                        'headers' => $response->headers(),
+                        'body' => $response->json()
+                    ]);
+                }
+            }
             
             if ($response->successful()) {
                 // Get the response data
@@ -245,6 +313,60 @@ class BillingService
         ]);
         $receiverType = $partyInvoiceData->itipoRec ?? '02';
         $isDomesticReceiver = in_array((string) $receiverType, ['01', '03'], true);
+        $documentType = '01';
+        $destinationType = 1; // 1=Panama, 2=Exterior
+
+        $paymentMethod = $sale->paymentType == 'Cash' ? '02' : '01'; // PDF v1.4: 01=credito, 02=efectivo
+
+        $receiverData = [
+            'itipoRec' => $receiverType,
+            'cpaisRec' => 'PA',
+            'dnombRec' => $partyInvoiceData->dnombRec ?? null,
+        ];
+
+        if ($partyInvoiceData && (($partyInvoiceData->itipoRec ?? '') == '01' || ($partyInvoiceData->itipoRec ?? '') == '03') && isset($partyInvoiceData->druc)) {
+            $receiverData['grucRec'] = [
+                'dtipoRuc' => isset($partyInvoiceData->dtipoRuc) ? ($partyInvoiceData->dtipoRuc == 'Natural' ? '1' : '2') : '1',
+                'druc' => $partyInvoiceData->druc,
+                'ddv' => $partyInvoiceData->ddv ?? null,
+            ];
+        } elseif ($partyInvoiceData && (empty($partyInvoiceData->dtipoRuc) || ($partyInvoiceData->dtipoRuc ?? '') == 'Jurídico') && isset($partyInvoiceData->druc)) {
+            $receiverData['grucRec'] = [
+                'dtipoRuc' => '2',
+                'druc' => $partyInvoiceData->druc,
+                'ddv' => $partyInvoiceData->ddv ?? null,
+            ];
+        } elseif ($partyInvoiceData && isset($partyInvoiceData->druc)) {
+            $receiverData['grucRec'] = [
+                'dtipoRuc' => '1',
+                'druc' => $partyInvoiceData->druc,
+            ];
+        }
+
+        if ((string) $receiverType === '04') {
+            $receiverData['gidExt'] = [
+                'didExt' => $partyInvoiceData->didExt ?? null,
+                'dpaisExt' => $partyInvoiceData->dpaisExt ?? null,
+            ];
+        }
+
+        if (isset($partyInvoiceData->dcorElectRec) && !empty($partyInvoiceData->dcorElectRec)) {
+            $receiverData['dcorElectRec'] = [$partyInvoiceData->dcorElectRec];
+        }
+
+        if ($isDomesticReceiver) {
+            $receiverData['ddirecRec'] = $partyInvoiceData->ddirecRec ?? null;
+            if (isset($partyInvoiceData->dcodUbi)) {
+                $receiverData['gubiRec'] = [
+                    'dcodUbi' => $partyInvoiceData->dcodUbi,
+                    'dcorreg' => $partyInvoiceData->dcorreg,
+                    'dprov' => $partyInvoiceData->dprov,
+                    'ddistr' => $partyInvoiceData->ddistr,
+                ];
+            }
+        }
+
+        $receiverData = $this->removeNullValues($receiverData);
 
         $formattedData = [
             'gitem' => [],
@@ -269,61 +391,29 @@ class BillingService
                         'dtipoRuc' => $isLiveMode ? ($invoiceData->dtipoRuc == "Natural" ? 1 : 2) : 2
                     ]
                 ],
-                'dseg' => null,
+                'dseg' => '0.00',
                 'itpEmis' => '01',
                 'itipoSuc' => 1,
                 'dptoFacDF' => str_pad($business->id, 3, '0', STR_PAD_LEFT),
                 'iproGen' => 1,
                 'denvFE' => $denvFe,
                 'iformCAFE' => 1,
-                'idest' => 1,
-                'gdatRec' => [
-                    'grucRec' => $partyInvoiceData && (($partyInvoiceData->itipoRec ?? '') == "01" || ($partyInvoiceData->itipoRec ?? '') == "03") && isset($partyInvoiceData->druc) ? [
-                        'dtipoRuc' => isset($partyInvoiceData->dtipoRuc) ? ($partyInvoiceData->dtipoRuc == "Natural" ? "1" : "2") : "1",
-                        'druc' => $partyInvoiceData->druc,
-                        'ddv' => $partyInvoiceData->ddv ?? null
-                    ] : ($partyInvoiceData && (empty($partyInvoiceData->dtipoRuc) || ($partyInvoiceData->dtipoRuc ?? '') == "Jurídico") && isset($partyInvoiceData->druc) ? [
-                        'dtipoRuc' => "2",
-                        'druc' => $partyInvoiceData->druc,
-                        'ddv' => $partyInvoiceData->ddv ?? null
-                    ] : ($partyInvoiceData && isset($partyInvoiceData->druc) ? [
-                        'dtipoRuc' => "1",
-                        'druc' => $partyInvoiceData->druc
-                    ] : null)),
-                    'cpaisRec' => 'PA',
-                    'gidExt' => null,
-                    'dnombRec' => $partyInvoiceData->dnombRec ?? null,
-                    'itipoRec' => $receiverType,
-                    'gubiRec' => isset($partyInvoiceData->dcodUbi) && $isDomesticReceiver ? [
-                        'dcodUbi' => $partyInvoiceData->dcodUbi,
-                        'dcorreg' =>  $partyInvoiceData->dcorreg,
-                        'dprov' => $partyInvoiceData->dprov,
-                        'ddistr' => $partyInvoiceData->ddistr
-                    ] : null,
-                    'gidExt' => (string) $receiverType === '04' ? [
-                        'didExt' => $partyInvoiceData->didExt,
-                        'dpaisExt' => $partyInvoiceData->dpaisExt,
-                    ] : null,
-                    'ddirecRec' => $isDomesticReceiver ? ($partyInvoiceData->ddirecRec ?? null) : null,
-                    'dcorElectRec' => isset($partyInvoiceData->dcorElectRec) ? [$partyInvoiceData->dcorElectRec] : null,
-                ],
-                'gfexp' => null,
+                'idest' => $destinationType,
+                'gdatRec' => $receiverData,
                 'itipoTranVenta' => 1,
                 'itipoOp' => 1,
                 'dnroDF' => str_pad((int)$invoiceNumber, 9, '0', STR_PAD_LEFT),
                 'ientCAFE' => 1,
                 'iamb' => $iamb,
                 'dfechaEm' => date('Y-m-d\TH:i:sP', strtotime($sale->saleDate ?? now())),
-                'gdfref' => null,
-                'idoc' => '01'
+                'idoc' => $documentType
             ],
             'dverForm' => '1.00',
             'gtot' => [
                 'gformaPago' => [
                     [
-                        'dformaPagoDesc' => null,
                         'dvlrCuota' => number_format($sale->totalAmount, 2),
-                        'iformaPago' => $sale->paymentType == 'Cash' ? '01' : '02'
+                        'iformaPago' => $paymentMethod
                     ]
                 ],
                 'dvtot' => number_format($sale->totalAmount, 2),
@@ -341,6 +431,14 @@ class BillingService
                 'dvtotItems' => number_format($sale->totalAmount, 2)
             ]
         ];
+
+        if ($destinationType === 2) {
+            $formattedData['gdgen']['gfexp'] = (object) [];
+        }
+
+        if (in_array($documentType, ['04', '05'], true)) {
+            $formattedData['gdgen']['gdfref'] = [];
+        }
         
         // Add items to the gitem array
         foreach ($saleDetails as $index => $detail) {
