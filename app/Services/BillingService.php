@@ -56,6 +56,11 @@ class BillingService
         return $this->apiKey;
     }
 
+    protected function asNumber($value, int $decimals = 2): float
+    {
+        return round((float) $value, $decimals);
+    }
+
     protected function buildCompatibilityPayload(array $payload): array
     {
         // Some eMagic validations treat nullable fields as required.
@@ -393,7 +398,7 @@ class BillingService
                         'dtipoRuc' => $isLiveMode ? ($invoiceData->dtipoRuc == "Natural" ? 1 : 2) : 2
                     ]
                 ],
-                'dseg' => '0.00',
+                'dseg' => str_pad((string) $sale->id, 9, '0', STR_PAD_LEFT),
                 'itpEmis' => '01',
                 'itipoSuc' => 1,
                 'dptoFacDF' => str_pad($business->id, 3, '0', STR_PAD_LEFT),
@@ -414,22 +419,22 @@ class BillingService
             'gtot' => [
                 'gformaPago' => [
                     [
-                        'dvlrCuota' => number_format($sale->totalAmount, 2),
+                        'dvlrCuota' => $this->asNumber($sale->totalAmount, 2),
                         'iformaPago' => $paymentMethod
                     ]
                 ],
-                'dvtot' => number_format($sale->totalAmount, 2),
-                'dtotITBMS' => number_format($sale->vat_amount ?? 0, 2),
-                'dtotRec' => number_format($sale->totalAmount, 2),
-                'dtotDesc' => number_format($sale->discountAmount ?? 0, 2),
-                'dtotSeg' => '0.00',
-                'dtotNeto' => number_format($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
-                'dtotAcar' => '0.00',
-                'dvuelto' => '0.00',
-                'dtotGravado' => number_format($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
+                'dvtot' => $this->asNumber($sale->totalAmount, 2),
+                'dtotITBMS' => $this->asNumber($sale->vat_amount ?? 0, 2),
+                'dtotRec' => $this->asNumber($sale->totalAmount, 2),
+                'dtotDesc' => $this->asNumber($sale->discountAmount ?? 0, 2),
+                'dtotSeg' => $this->asNumber(0, 2),
+                'dtotNeto' => $this->asNumber($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
+                'dtotAcar' => $this->asNumber(0, 2),
+                'dvuelto' => $this->asNumber(0, 2),
+                'dtotGravado' => $this->asNumber($sale->vat_amount ?? 0, 2),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
-                'dvtotItems' => number_format($sale->totalAmount, 2)
+                'dvtotItems' => $this->asNumber($sale->totalAmount, 2)
             ]
         ];
 
@@ -441,7 +446,7 @@ class BillingService
             $formattedData['gtot']['gdescBonif'] = [
                 [
                     'dDescProd' => 'DESCUENTO GENERAL',
-                    'dValDesc' => number_format((float) $sale->discountAmount, 2),
+                    'dValDesc' => $this->asNumber($sale->discountAmount, 2),
                 ],
             ];
         }
@@ -466,19 +471,19 @@ class BillingService
             $formattedData['gitem'][] = [
                 'gitbmsitem' => [
                     'dtasaITBMS' => '01', // Standard rate
-                    'dvalITBMS' => number_format($vatAmount, 6)
+                    'dvalITBMS' => $this->asNumber($vatAmount, 6)
                 ],
                 'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
                 'cunidad' => 'UND',
                 'ddescProd' => $product->productName,
-                'dcantCodInt' => number_format($quantity, 2),
+                'dcantCodInt' => $this->asNumber($quantity, 2),
                 'gprecios' => [
-                    'dprAcarItem' => '0.00',
-                    'dprSegItem' => '0.00',
-                    'dprItem' => number_format($lineSubtotal, 6),
-                    'dprUnit' => number_format($unitNetPrice, 6),
-                    'dprUnitDesc' => '0.00',
-                    'dvalTotItem' => number_format($lineTotal, 2)
+                    'dprAcarItem' => $this->asNumber(0, 2),
+                    'dprSegItem' => $this->asNumber(0, 2),
+                    'dprItem' => $this->asNumber($lineSubtotal, 6),
+                    'dprUnit' => $this->asNumber($unitNetPrice, 6),
+                    'dprUnitDesc' => $this->asNumber(0, 2),
+                    'dvalTotItem' => $this->asNumber($lineTotal, 2)
                 ],
                 'cunidadCPBS' => 'UND',
                 'dsecItem' => $index + 1
