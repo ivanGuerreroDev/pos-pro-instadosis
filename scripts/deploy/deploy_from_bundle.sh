@@ -64,7 +64,7 @@ $COMPOSER_BIN install --no-interaction --no-dev --prefer-dist --optimize-autoloa
 $PHP_BIN artisan migrate --force
 $PHP_BIN artisan optimize:clear
 $PHP_BIN artisan config:cache
-$PHP_BIN artisan route:cache
+$PHP_BIN artisan route:cache || echo "[WARN] route:cache failed; continuing deploy"
 $PHP_BIN artisan view:cache
 
 sudo systemctl reload php-fpm
