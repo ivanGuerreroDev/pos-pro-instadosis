@@ -54,12 +54,13 @@ jobs:
       - name: Upload bundle to EC2
         run: |
           scp -i ~/.ssh/id_rsa dist/pos-pro-instadosis.tar.gz "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/pos-pro-instadosis.tar.gz"
+          scp -i ~/.ssh/id_rsa scripts/deploy/deploy_from_bundle.sh "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/deploy_from_bundle.sh"
 
       - name: Deploy on EC2 from bundle
         run: |
           ssh -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
-            "chmod +x /usr/share/nginx/html/pos-pro-instadosis/scripts/deploy/deploy_from_bundle.sh && \
+            "chmod +x /tmp/deploy_from_bundle.sh && \
              APP_DIR='/usr/share/nginx/html/pos-pro-instadosis' \
              BUNDLE_PATH='/tmp/pos-pro-instadosis.tar.gz' \
              HEALTHCHECK_URL='https://pos.instadosis.com' \
-             /usr/share/nginx/html/pos-pro-instadosis/scripts/deploy/deploy_from_bundle.sh"
+             /tmp/deploy_from_bundle.sh"
