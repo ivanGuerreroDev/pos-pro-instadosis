@@ -8,6 +8,7 @@ APP_DIR="${APP_DIR:-/usr/share/nginx/html/pos-pro-instadosis}"
 RELEASES_DIR="${RELEASES_DIR:-/opt/pos-pro-instadosis/releases}"
 BUNDLE_PATH="${BUNDLE_PATH:-}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://pos.instadosis.com}"
+STRICT_HEALTHCHECK="${STRICT_HEALTHCHECK:-false}"
 PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 
@@ -70,8 +71,14 @@ $PHP_BIN artisan view:cache
 sudo systemctl reload php-fpm
 sudo systemctl reload nginx
 
-if command -v curl >/dev/null 2>&1; then
-  curl -fsS "$HEALTHCHECK_URL" >/dev/null
+if command -v curl >/dev/null 2>&1 && [[ -n "$HEALTHCHECK_URL" ]]; then
+  if ! curl -fsS "$HEALTHCHECK_URL" >/dev/null; then
+    if [[ "$STRICT_HEALTHCHECK" == "true" ]]; then
+      echo "[ERROR] Healthcheck failed: $HEALTHCHECK_URL" >&2
+      exit 1
+    fi
+    echo "[WARN] Healthcheck failed, continuing: $HEALTHCHECK_URL"
+  fi
 fi
 
 echo "[OK] Deploy completed from bundle: $BUNDLE_PATH"
