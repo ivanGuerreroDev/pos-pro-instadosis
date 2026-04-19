@@ -318,7 +318,6 @@ class BillingService
         $destinationType = 1; // 1=Panama, 2=Exterior
 
         $paymentMethod = $sale->paymentType == 'Cash' ? '02' : '01'; // PDF v1.4: 01=credito, 02=efectivo
-        $paymentDescription = $paymentMethod === '02' ? 'EFECTIVO' : 'CREDITO';
         $emissionDate = Carbon::parse($sale->saleDate ?? now(), 'America/Panama')->format('Y-m-d\TH:i:sP');
 
         $receiverData = [
@@ -329,19 +328,19 @@ class BillingService
 
         if ($partyInvoiceData && (($partyInvoiceData->itipoRec ?? '') == '01' || ($partyInvoiceData->itipoRec ?? '') == '03') && isset($partyInvoiceData->druc)) {
             $receiverData['grucRec'] = [
-                'dtipoRuc' => isset($partyInvoiceData->dtipoRuc) ? ($partyInvoiceData->dtipoRuc == 'Natural' ? '1' : '2') : '1',
+                'dtipoRuc' => isset($partyInvoiceData->dtipoRuc) ? ($partyInvoiceData->dtipoRuc == 'Natural' ? 1 : 2) : 1,
                 'druc' => $partyInvoiceData->druc,
                 'ddv' => $partyInvoiceData->ddv ?? null,
             ];
         } elseif ($partyInvoiceData && (empty($partyInvoiceData->dtipoRuc) || ($partyInvoiceData->dtipoRuc ?? '') == 'Jurídico') && isset($partyInvoiceData->druc)) {
             $receiverData['grucRec'] = [
-                'dtipoRuc' => '2',
+                'dtipoRuc' => 2,
                 'druc' => $partyInvoiceData->druc,
                 'ddv' => $partyInvoiceData->ddv ?? null,
             ];
         } elseif ($partyInvoiceData && isset($partyInvoiceData->druc)) {
             $receiverData['grucRec'] = [
-                'dtipoRuc' => '1',
+                'dtipoRuc' => 1,
                 'druc' => $partyInvoiceData->druc,
             ];
         }
@@ -415,7 +414,6 @@ class BillingService
             'gtot' => [
                 'gformaPago' => [
                     [
-                        'dformaPagoDesc' => $paymentDescription,
                         'dvlrCuota' => number_format($sale->totalAmount, 2),
                         'iformaPago' => $paymentMethod
                     ]
@@ -428,12 +426,16 @@ class BillingService
                 'dtotNeto' => number_format($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
                 'dtotAcar' => '0.00',
                 'dvuelto' => '0.00',
-                'dtotGravado' => number_format($sale->vat_amount ?? 0, 2),
+                'dtotGravado' => number_format($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
                 'dvtotItems' => number_format($sale->totalAmount, 2)
             ]
         ];
+
+        if ($paymentMethod === '99') {
+            $formattedData['gtot']['gformaPago'][0]['dformaPagoDesc'] = 'OTROS';
+        }
 
         if ((float) ($sale->discountAmount ?? 0) > 0) {
             $formattedData['gtot']['gdescBonif'] = [
@@ -467,7 +469,7 @@ class BillingService
                     'dvalITBMS' => number_format($vatAmount, 6)
                 ],
                 'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
-                'cunidad' => 'und',
+                'cunidad' => 'UND',
                 'ddescProd' => $product->productName,
                 'dcantCodInt' => number_format($quantity, 2),
                 'gprecios' => [
