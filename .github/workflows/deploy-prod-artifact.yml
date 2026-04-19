@@ -1,0 +1,64 @@
+name: Deploy Production (Artifact, No Git Pull)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build_bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build source bundle
+        run: |
+          mkdir -p dist
+          tar -czf dist/pos-pro-instadosis.tar.gz \
+            --exclude-vcs \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='storage/logs/*' \
+            --exclude='storage/framework/cache/*' \
+            --exclude='storage/framework/sessions/*' \
+            --exclude='storage/framework/views/*' \
+            .
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-pro-instadosis-bundle
+          path: dist/pos-pro-instadosis.tar.gz
+          retention-days: 7
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build_bundle
+    steps:
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pos-pro-instadosis-bundle
+          path: dist
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload bundle to EC2
+        run: |
+          scp -i ~/.ssh/id_rsa dist/pos-pro-instadosis.tar.gz "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/pos-pro-instadosis.tar.gz"
+
+      - name: Deploy on EC2 from bundle
+        run: |
+          ssh -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "chmod +x /usr/share/nginx/html/pos-pro-instadosis/scripts/deploy/deploy_from_bundle.sh && \
+             APP_DIR='/usr/share/nginx/html/pos-pro-instadosis' \
+             BUNDLE_PATH='/tmp/pos-pro-instadosis.tar.gz' \
+             HEALTHCHECK_URL='https://pos.instadosis.com' \
+             /usr/share/nginx/html/pos-pro-instadosis/scripts/deploy/deploy_from_bundle.sh"
