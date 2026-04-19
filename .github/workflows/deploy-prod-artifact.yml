@@ -2,7 +2,7 @@ name: Deploy Production (Artifact, No Git Pull)
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
   workflow_dispatch:
 
 jobs:
