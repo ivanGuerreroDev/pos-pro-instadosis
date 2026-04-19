@@ -466,7 +466,7 @@ class BillingService
                     'dprUnitDesc' => '0.00',
                     'dvalTotItem' => number_format($lineTotal, 2)
                 ],
-                'cunidadCPBS' => null,
+                'cunidadCPBS' => 'UND',
                 'dsecItem' => $index + 1
             ];
         }
@@ -478,8 +478,9 @@ class BillingService
                 'dnroPed' => (int) $sale->meta['purchase_order']
             ];
         }
-        
-        return $formattedData;
+
+        // Remove nullable keys to avoid strict validator rejections for null values.
+        return $this->removeNullValues($formattedData);
     }
 
     /**
