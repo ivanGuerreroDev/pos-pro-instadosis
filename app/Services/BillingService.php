@@ -10,6 +10,7 @@ use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class BillingService
 {
@@ -317,6 +318,8 @@ class BillingService
         $destinationType = 1; // 1=Panama, 2=Exterior
 
         $paymentMethod = $sale->paymentType == 'Cash' ? '02' : '01'; // PDF v1.4: 01=credito, 02=efectivo
+        $paymentDescription = $paymentMethod === '02' ? 'EFECTIVO' : 'CREDITO';
+        $emissionDate = Carbon::parse($sale->saleDate ?? now(), 'America/Panama')->format('Y-m-d\TH:i:sP');
 
         $receiverData = [
             'itipoRec' => $receiverType,
@@ -405,13 +408,14 @@ class BillingService
                 'dnroDF' => str_pad((int)$invoiceNumber, 9, '0', STR_PAD_LEFT),
                 'ientCAFE' => 1,
                 'iamb' => $iamb,
-                'dfechaEm' => date('Y-m-d\TH:i:sP', strtotime($sale->saleDate ?? now())),
+                'dfechaEm' => $emissionDate,
                 'idoc' => $documentType
             ],
             'dverForm' => '1.00',
             'gtot' => [
                 'gformaPago' => [
                     [
+                        'dformaPagoDesc' => $paymentDescription,
                         'dvlrCuota' => number_format($sale->totalAmount, 2),
                         'iformaPago' => $paymentMethod
                     ]
@@ -424,13 +428,21 @@ class BillingService
                 'dtotNeto' => number_format($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
                 'dtotAcar' => '0.00',
                 'dvuelto' => '0.00',
-                'gdescBonif' => [],
                 'dtotGravado' => number_format($sale->vat_amount ?? 0, 2),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
                 'dvtotItems' => number_format($sale->totalAmount, 2)
             ]
         ];
+
+        if ((float) ($sale->discountAmount ?? 0) > 0) {
+            $formattedData['gtot']['gdescBonif'] = [
+                [
+                    'dDescProd' => 'DESCUENTO GENERAL',
+                    'dValDesc' => number_format((float) $sale->discountAmount, 2),
+                ],
+            ];
+        }
 
         if ($destinationType === 2) {
             $formattedData['gdgen']['gfexp'] = (object) [];
