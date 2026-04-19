@@ -91,14 +91,6 @@ class BillingService
             }
         }
 
-        if (isset($payload['gitem']) && is_array($payload['gitem'])) {
-            foreach ($payload['gitem'] as $idx => $item) {
-                if (is_array($item) && (!array_key_exists('cunidadCPBS', $item) || $item['cunidadCPBS'] === null)) {
-                    $payload['gitem'][$idx]['cunidadCPBS'] = 'UND';
-                }
-            }
-        }
-
         return $payload;
     }
     protected function isLiveMode(): bool
@@ -426,17 +418,17 @@ class BillingService
                 'dvtot' => $this->asNumber($sale->totalAmount, 2),
                 'dtotITBMS' => $this->asNumber($sale->vat_amount ?? 0, 2),
                 'dtotRec' => $this->asNumber($sale->totalAmount, 2),
-                'dtotDesc' => $this->asNumber($sale->discountAmount ?? 0, 2),
-                'dtotSeg' => $this->asNumber(0, 2),
                 'dtotNeto' => $this->asNumber($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
-                'dtotAcar' => $this->asNumber(0, 2),
-                'dvuelto' => $this->asNumber(0, 2),
                 'dtotGravado' => $this->asNumber($sale->vat_amount ?? 0, 2),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
                 'dvtotItems' => $this->asNumber($sale->totalAmount, 2)
             ]
         ];
+
+        if ((float) ($sale->discountAmount ?? 0) > 0) {
+            $formattedData['gtot']['dtotDesc'] = $this->asNumber($sale->discountAmount, 2);
+        }
 
         if ($paymentMethod === '99') {
             $formattedData['gtot']['gformaPago'][0]['dformaPagoDesc'] = 'OTROS';
@@ -478,14 +470,10 @@ class BillingService
                 'ddescProd' => $product->productName,
                 'dcantCodInt' => $this->asNumber($quantity, 2),
                 'gprecios' => [
-                    'dprAcarItem' => $this->asNumber(0, 2),
-                    'dprSegItem' => $this->asNumber(0, 2),
                     'dprItem' => $this->asNumber($lineSubtotal, 6),
                     'dprUnit' => $this->asNumber($unitNetPrice, 6),
-                    'dprUnitDesc' => $this->asNumber(0, 2),
                     'dvalTotItem' => $this->asNumber($lineTotal, 2)
                 ],
-                'cunidadCPBS' => 'UND',
                 'dsecItem' => $index + 1
             ];
         }
