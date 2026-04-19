@@ -52,6 +52,11 @@ sudo rsync -a --delete \
   --exclude='node_modules' \
   "$TMP_EXTRACT/" "$APP_DIR/"
 
+# Ensure runtime paths are writable before composer/artisan hooks run.
+sudo chown -R ec2-user:ec2-user "$APP_DIR"
+sudo mkdir -p "$APP_DIR/storage" "$APP_DIR/bootstrap/cache" "$APP_DIR/storage/logs"
+sudo chmod -R ug+rw "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
+
 cd "$APP_DIR"
 
 $COMPOSER_BIN install --no-interaction --no-dev --prefer-dist --optimize-autoloader
@@ -61,9 +66,6 @@ $PHP_BIN artisan optimize:clear
 $PHP_BIN artisan config:cache
 $PHP_BIN artisan route:cache
 $PHP_BIN artisan view:cache
-
-sudo chown -R ec2-user:ec2-user "$APP_DIR"
-sudo chmod -R ug+rw "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
 
 sudo systemctl reload php-fpm
 sudo systemctl reload nginx
