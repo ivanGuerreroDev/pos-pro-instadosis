@@ -30,19 +30,25 @@ class BatchAllocationService
         }
 
         // Use FEFO strategy (First Expired, First Out)
-        return $this->allocateFEFO($productId, $requestedQuantity);
+        return $this->allocateFEFO($productId, $requestedQuantity, (bool) ($product->is_medicine ?? false));
     }
 
     /**
      * Allocate batches using FEFO (First Expired, First Out) strategy.
      */
-    private function allocateFEFO(int $productId, int $requestedQuantity): array
+    private function allocateFEFO(int $productId, int $requestedQuantity, bool $isMedicine = false): array
     {
-        $batches = ProductBatch::where('product_id', $productId)
+        $query = ProductBatch::where('product_id', $productId)
             ->active()
             ->withStock()
-            ->orderByExpiry()
-            ->get();
+            ->orderByExpiry();
+
+        // For medicines, enforce real lot usage and ignore technical placeholder batches.
+        if ($isMedicine) {
+            $query->where('batch_number', '!=', 'SIN LOTE');
+        }
+
+        $batches = $query->get();
 
         return $this->allocateFromBatches($batches, $requestedQuantity);
     }
