@@ -23,6 +23,28 @@ class BillingService
     protected $httpConnectTimeout;
     protected $httpTimeout;
 
+    /**
+     * Remove null values from nested payloads to avoid sending nullable keys
+     * that some external validators treat as invalid required fields.
+     */
+    protected function removeNullValues($value)
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        $cleaned = [];
+        foreach ($value as $key => $item) {
+            $item = $this->removeNullValues($item);
+            if ($item === null) {
+                continue;
+            }
+            $cleaned[$key] = $item;
+        }
+
+        return $cleaned;
+    }
+
     protected function resolveApiKeyForSale(Sale $sale): ?string
     {
         $business = Business::select('id', 'emagic_api_key')->find($sale->business_id);
@@ -70,7 +92,7 @@ class BillingService
     public function sendSaleToExternalBilling(Sale $sale, $party = null)
     {
         try {
-            $jsonData = $this->formatSaleDataForBilling($sale, $party);
+            $jsonData = $this->removeNullValues($this->formatSaleDataForBilling($sale, $party));
             $apiKey = $this->resolveApiKeyForSale($sale);
 
             if (empty($apiKey)) {
@@ -221,6 +243,9 @@ class BillingService
                 'repo_env' => $this->getRepoEnvironment(),
             ]
         ]);
+        $receiverType = $partyInvoiceData->itipoRec ?? '02';
+        $isDomesticReceiver = in_array((string) $receiverType, ['01', '03'], true);
+
         $formattedData = [
             'gitem' => [],
             'gdgen' => [
@@ -267,20 +292,20 @@ class BillingService
                     ] : null)),
                     'cpaisRec' => 'PA',
                     'gidExt' => null,
-                    'dnombRec' => ($partyInvoiceData->itipoRec == "01" || $partyInvoiceData->itipoRec == "03" ) ? $partyInvoiceData->dnombRec : $partyInvoiceData->dnombRec ?? null,
-                    'itipoRec' => $partyInvoiceData->itipoRec ?? "02",
-                    'gubiRec' => isset($partyInvoiceData->dcodUbi) && ($partyInvoiceData->itipoRec == "01" || $partyInvoiceData->itipoRec == "03" ) ? [
+                    'dnombRec' => $partyInvoiceData->dnombRec ?? null,
+                    'itipoRec' => $receiverType,
+                    'gubiRec' => isset($partyInvoiceData->dcodUbi) && $isDomesticReceiver ? [
                         'dcodUbi' => $partyInvoiceData->dcodUbi,
                         'dcorreg' =>  $partyInvoiceData->dcorreg,
                         'dprov' => $partyInvoiceData->dprov,
                         'ddistr' => $partyInvoiceData->ddistr
                     ] : null,
-                    'gidExt' => $partyInvoiceData->itipoRec == "04" ? [
+                    'gidExt' => (string) $receiverType === '04' ? [
                         'didExt' => $partyInvoiceData->didExt,
                         'dpaisExt' => $partyInvoiceData->dpaisExt,
                     ] : null,
-                    'ddirecRec' => ($partyInvoiceData->itipoRec == "01" || $partyInvoiceData->itipoRec == "03" ) ? $partyInvoiceData->ddirecRec ?? null : null,
-                    'dcorElectRec' => $partyInvoiceData->dcorElectRec??null,
+                    'ddirecRec' => $isDomesticReceiver ? ($partyInvoiceData->ddirecRec ?? null) : null,
+                    'dcorElectRec' => isset($partyInvoiceData->dcorElectRec) ? [$partyInvoiceData->dcorElectRec] : null,
                 ],
                 'gfexp' => null,
                 'itipoTranVenta' => 1,
@@ -320,11 +345,11 @@ class BillingService
         // Add items to the gitem array
         foreach ($saleDetails as $index => $detail) {
             $product = $detail->product;
-            $itemPrice = $detail->price / $detail->quantities; // Unit price
-            $itemTotal = $detail->price; // Total price
-            $vatRate = $sale->vat_percent ?? 7; // Default VAT rate
-            $vatAmount = ($itemTotal * $vatRate) / 100; // VAT amount
-            $netPrice = $itemTotal - $vatAmount; // Net price
+            $quantity = max((float) $detail->quantities, 1.0);
+            $lineSubtotal = (float) ($detail->subtotal ?? ((float) $detail->price * $quantity));
+            $vatAmount = (float) ($detail->tax_amount ?? 0);
+            $lineTotal = (float) ($detail->total ?? ($lineSubtotal + $vatAmount));
+            $unitNetPrice = $lineSubtotal / $quantity;
             
             $formattedData['gitem'][] = [
                 'gitbmsitem' => [
@@ -334,14 +359,14 @@ class BillingService
                 'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
                 'cunidad' => 'und',
                 'ddescProd' => $product->productName,
-                'dcantCodInt' => number_format($detail->quantities, 2),
+                'dcantCodInt' => number_format($quantity, 2),
                 'gprecios' => [
                     'dprAcarItem' => '0.00',
                     'dprSegItem' => '0.00',
-                    'dprItem' => number_format($netPrice, 6),
-                    'dprUnit' => number_format($netPrice / $detail->quantities, 6),
+                    'dprItem' => number_format($lineSubtotal, 6),
+                    'dprUnit' => number_format($unitNetPrice, 6),
                     'dprUnitDesc' => '0.00',
-                    'dvalTotItem' => number_format($itemTotal, 2)
+                    'dvalTotItem' => number_format($lineTotal, 2)
                 ],
                 'cunidadCPBS' => null,
                 'dsecItem' => $index + 1
