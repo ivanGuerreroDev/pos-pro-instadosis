@@ -17,6 +17,7 @@ jobs:
           mkdir -p dist
           tar -czf dist/pos-pro-instadosis.tar.gz \
             --exclude-vcs \
+            --exclude='dist' \
             --exclude='.github' \
             --exclude='node_modules' \
             --exclude='vendor' \
