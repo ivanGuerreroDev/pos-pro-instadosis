@@ -54,9 +54,18 @@ sudo rsync -a --delete \
   "$TMP_EXTRACT/" "$APP_DIR/"
 
 # Ensure runtime paths are writable before composer/artisan hooks run.
+# Use php-fpm group for runtime write access (Amazon Linux default: apache).
+FPM_GROUP="$(sudo sed -n 's/^[[:space:]]*group[[:space:]]*=[[:space:]]*//p' /etc/php-fpm.d/www.conf | head -n1)"
+if [[ -z "$FPM_GROUP" ]]; then
+  FPM_GROUP="apache"
+fi
+
 sudo chown -R ec2-user:ec2-user "$APP_DIR"
 sudo mkdir -p "$APP_DIR/storage" "$APP_DIR/bootstrap/cache" "$APP_DIR/storage/logs"
-sudo chmod -R ug+rw "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
+sudo touch "$APP_DIR/storage/logs/laravel.log"
+sudo chown -R ec2-user:"$FPM_GROUP" "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
+sudo chmod -R ug+rwX "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
+sudo find "$APP_DIR/storage" "$APP_DIR/bootstrap/cache" -type d -exec chmod g+s {} \;
 
 cd "$APP_DIR"
 
