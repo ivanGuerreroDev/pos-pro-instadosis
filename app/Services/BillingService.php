@@ -401,7 +401,7 @@ class BillingService
                 'gdatRec' => $receiverData,
                 'itipoTranVenta' => 1,
                 'itipoOp' => 1,
-                'dnroDF' => str_pad((int)$invoiceNumber, 9, '0', STR_PAD_LEFT),
+                'dnroDF' => str_pad((int)$invoiceNumber, 10, '0', STR_PAD_LEFT),
                 'ientCAFE' => 1,
                 'iamb' => $iamb,
                 'dfechaEm' => $emissionDate,
