@@ -26,8 +26,11 @@ run_sql "USE laravel; UPDATE businesses SET billing_status='active', emagic_api_
 echo "[INFO] Ensure minimum e2e dataset exists"
 run_sql "USE laravel; \
 INSERT INTO business_invoice_data (business_id,dtipoRuc,druc,ddv,dnombEm,dcoordEm,ddirecEm,dcodUbi,dcorreg,ddistr,dprov,dtfnEm,dcorElectEmi,created_at,updated_at) \
-SELECT ${BUSINESS_ID},'Juridico','155705519-2-2021','37','Trade G SA','8.9833,-79.5167','Ciudad de Panama','8-10-01','8-10','8','8','60000000','qa-tradeg@example.com',NOW(),NOW() FROM DUAL \
+SELECT ${BUSINESS_ID},'Juridico','155705519-2-2021','37','Trade G SA','8.9833,-79.5167','Ciudad de Panama','8-8-9','SAN FRANCISCO','PANAMA','PANAMA','60000000','qa-tradeg@example.com',NOW(),NOW() FROM DUAL \
 WHERE NOT EXISTS (SELECT 1 FROM business_invoice_data WHERE business_id=${BUSINESS_ID}); \
+UPDATE business_invoice_data \
+SET dtipoRuc='Juridico', druc='155705519-2-2021', ddv='37', dnombEm='Trade G SA', dcoordEm='8.9833,-79.5167', ddirecEm='Ciudad de Panama', dcodUbi='8-8-9', dcorreg='SAN FRANCISCO', ddistr='PANAMA', dprov='PANAMA', dtfnEm='60000000', dcorElectEmi='qa-tradeg@example.com', updated_at=NOW() \
+WHERE business_id=${BUSINESS_ID}; \
 INSERT INTO categories (categoryName,business_id,variationCapacity,variationColor,variationSize,variationType,variationWeight,status,created_at,updated_at) \
 SELECT 'QA Categoria',${BUSINESS_ID},0,0,0,0,0,1,NOW(),NOW() FROM DUAL \
 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE business_id=${BUSINESS_ID} AND categoryName='QA Categoria'); \
@@ -41,13 +44,13 @@ INSERT INTO parties (name,business_id,email,type,phone,due,address,image,status,
 SELECT 'Cliente E2E QA',${BUSINESS_ID},'cliente-e2e@example.com','Retailer','60009999',0,'Ciudad de Panama',NULL,1,NOW(),NOW() FROM DUAL \
 WHERE NOT EXISTS (SELECT 1 FROM parties WHERE business_id=${BUSINESS_ID} AND phone='60009999'); \
 INSERT INTO party_invoice_data (party_id,dtipoRuc,druc,ddv,itipoRec,dnombRec,ddirecRec,dcodUbi,dcorreg,ddistr,dprov,dcorElectRec,didExt,dpaisExt,created_at,updated_at) \
-SELECT p.id,'Jurídico','155705519-2-2021','37','01','Cliente E2E QA','Ciudad de Panama','8-10-01','8-10','8','8','cliente-e2e@example.com',NULL,NULL,NOW(),NOW() \
+SELECT p.id,NULL,NULL,NULL,'02','Consumidor Final E2E',NULL,NULL,NULL,NULL,NULL,'cliente-e2e@example.com',NULL,NULL,NOW(),NOW() \
 FROM parties p \
 WHERE p.business_id=${BUSINESS_ID} AND p.phone='60009999' \
   AND NOT EXISTS (SELECT 1 FROM party_invoice_data pid WHERE pid.party_id=p.id); \
 UPDATE party_invoice_data pid \
 JOIN parties p ON p.id = pid.party_id \
-SET pid.dtipoRuc='Jurídico', pid.druc='155705519-2-2021', pid.ddv='37', pid.itipoRec='01', pid.dnombRec='Cliente E2E QA', pid.ddirecRec='Ciudad de Panama', pid.dcodUbi='8-10-01', pid.dcorreg='8-10', pid.ddistr='8', pid.dprov='8', pid.dcorElectRec='cliente-e2e@example.com', pid.didExt=NULL, pid.dpaisExt=NULL, pid.updated_at=NOW() \
+SET pid.dtipoRuc=NULL, pid.druc=NULL, pid.ddv=NULL, pid.itipoRec='02', pid.dnombRec='Consumidor Final E2E', pid.ddirecRec=NULL, pid.dcodUbi=NULL, pid.dcorreg=NULL, pid.ddistr=NULL, pid.dprov=NULL, pid.dcorElectRec='cliente-e2e@example.com', pid.didExt=NULL, pid.dpaisExt=NULL, pid.updated_at=NOW() \
 WHERE p.business_id=${BUSINESS_ID} AND p.phone='60009999'; \
 INSERT INTO products (productName,business_id,unit_id,brand_id,category_id,productCode,productPicture,productDealerPrice,productPurchasePrice,productSalePrice,productWholeSalePrice,productStock,size,type,color,weight,capacity,productManufacturer,meta,track_by_batches,is_medicine,tax_rate,created_at,updated_at) \
 SELECT 'Producto E2E EMAGIC',${BUSINESS_ID},(SELECT id FROM units WHERE business_id=${BUSINESS_ID} AND unitName='Unidad' LIMIT 1),(SELECT id FROM brands WHERE business_id=${BUSINESS_ID} AND brandName='QA Marca' LIMIT 1),(SELECT id FROM categories WHERE business_id=${BUSINESS_ID} AND categoryName='QA Categoria' LIMIT 1),CONCAT('E2E-',DATE_FORMAT(NOW(),'%Y%m%d%H%i%s')),NULL,12.00,10.00,15.00,15.00,50,NULL,NULL,NULL,NULL,NULL,'QA Labs',NULL,0,1,'7',NOW(),NOW() FROM DUAL \
