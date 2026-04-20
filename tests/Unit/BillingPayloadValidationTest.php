@@ -130,6 +130,13 @@ class BillingPayloadValidationTest extends TestCase
                         'dvlrCuota' => 10,
                     ],
                 ],
+                'dvtot' => 10,
+                'dtotITBMS' => 0,
+                'dtotRec' => 10,
+                'dtotNeto' => 10,
+                'dtotGravado' => 0,
+                'dvtotItems' => 10,
+                'dnroItems' => 1,
             ],
             'gitem' => [
                 [

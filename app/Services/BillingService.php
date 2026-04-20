@@ -155,9 +155,37 @@ class BillingService
             }
             if (!isset($formaPago['dvlrCuota'])) {
                 $this->addPayloadError($errors, 'gtot.gformaPago[0].dvlrCuota', 'is required');
+            } elseif ((float) $formaPago['dvlrCuota'] <= 0) {
+                $this->addPayloadError($errors, 'gtot.gformaPago[0].dvlrCuota', 'must be greater than 0');
             }
             if ($iformaPago === '99' && empty($formaPago['dformaPagoDesc'])) {
                 $this->addPayloadError($errors, 'gtot.gformaPago[0].dformaPagoDesc', 'is required when iformaPago is 99');
+            }
+        }
+
+        $gtot = $payload['gtot'] ?? null;
+        if (!is_array($gtot)) {
+            $this->addPayloadError($errors, 'gtot', 'must be an object');
+        } else {
+            $requiredNumericTotals = [
+                'dvtot',
+                'dtotITBMS',
+                'dtotRec',
+                'dtotNeto',
+                'dtotGravado',
+                'dvtotItems',
+            ];
+
+            foreach ($requiredNumericTotals as $field) {
+                if (!array_key_exists($field, $gtot)) {
+                    $this->addPayloadError($errors, 'gtot.' . $field, 'is required');
+                } elseif ((float) $gtot[$field] < 0) {
+                    $this->addPayloadError($errors, 'gtot.' . $field, 'must be greater than or equal to 0');
+                }
+            }
+
+            if (!isset($gtot['dnroItems']) || (int) $gtot['dnroItems'] <= 0) {
+                $this->addPayloadError($errors, 'gtot.dnroItems', 'must be greater than 0');
             }
         }
 
@@ -183,6 +211,14 @@ class BillingService
                 }
                 if (!isset($item['gprecios']) || !is_array($item['gprecios'])) {
                     $this->addPayloadError($errors, $itemPath . '.gprecios', 'is required');
+                } else {
+                    foreach (['dprItem', 'dprUnit', 'dvalTotItem'] as $priceField) {
+                        if (!array_key_exists($priceField, $item['gprecios'])) {
+                            $this->addPayloadError($errors, $itemPath . '.gprecios.' . $priceField, 'is required');
+                        } elseif ((float) $item['gprecios'][$priceField] <= 0) {
+                            $this->addPayloadError($errors, $itemPath . '.gprecios.' . $priceField, 'must be greater than 0');
+                        }
+                    }
                 }
 
                 if (isset($item['gmedicina'])) {
