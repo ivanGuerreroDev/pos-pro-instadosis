@@ -61,6 +61,149 @@ class BillingService
         return round((float) $value, $decimals);
     }
 
+    protected function isValidDgiUbiCode($value): bool
+    {
+        if (!is_string($value) || $value === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/^\d{1,2}-\d{1,2}-\d{1,2}$/', $value);
+    }
+
+    protected function addPayloadError(array &$errors, string $path, string $message): void
+    {
+        $errors[] = $path . ': ' . $message;
+    }
+
+    protected function validatePayloadForContract(array $payload): array
+    {
+        $errors = [];
+
+        $gdgen = $payload['gdgen'] ?? [];
+        if (!is_array($gdgen)) {
+            $this->addPayloadError($errors, 'gdgen', 'must be an object');
+            return $errors;
+        }
+
+        $dnroDF = (string) ($gdgen['dnroDF'] ?? '');
+        if ($dnroDF === '' || !preg_match('/^\d{10}$/', $dnroDF)) {
+            $this->addPayloadError($errors, 'gdgen.dnroDF', 'must be 10 numeric digits');
+        }
+
+        $dseg = (string) ($gdgen['dseg'] ?? '');
+        if ($dseg === '' || !preg_match('/^\d{9}$/', $dseg)) {
+            $this->addPayloadError($errors, 'gdgen.dseg', 'must be 9 numeric digits');
+        }
+
+        $dptoFacDF = (string) ($gdgen['dptoFacDF'] ?? '');
+        if ($dptoFacDF === '' || !preg_match('/^\d{3}$/', $dptoFacDF)) {
+            $this->addPayloadError($errors, 'gdgen.dptoFacDF', 'must be 3 numeric digits');
+        }
+
+        $receiver = $gdgen['gdatRec'] ?? [];
+        if (!is_array($receiver)) {
+            $this->addPayloadError($errors, 'gdgen.gdatRec', 'must be an object');
+        } else {
+            $receiverType = (string) ($receiver['itipoRec'] ?? '');
+            if (!in_array($receiverType, ['01', '02', '03', '04'], true)) {
+                $this->addPayloadError($errors, 'gdgen.gdatRec.itipoRec', 'must be one of 01, 02, 03, 04');
+            }
+
+            if (in_array($receiverType, ['01', '03'], true)) {
+                if (empty($receiver['dnombRec'])) {
+                    $this->addPayloadError($errors, 'gdgen.gdatRec.dnombRec', 'is required for itipoRec 01/03');
+                }
+                if (empty($receiver['ddirecRec'])) {
+                    $this->addPayloadError($errors, 'gdgen.gdatRec.ddirecRec', 'is required for itipoRec 01/03');
+                }
+
+                $grucRec = $receiver['grucRec'] ?? [];
+                if (!is_array($grucRec) || empty($grucRec['druc']) || !isset($grucRec['dtipoRuc'])) {
+                    $this->addPayloadError($errors, 'gdgen.gdatRec.grucRec', 'druc and dtipoRuc are required for itipoRec 01/03');
+                }
+
+                $gubiRec = $receiver['gubiRec'] ?? [];
+                if (!is_array($gubiRec)) {
+                    $this->addPayloadError($errors, 'gdgen.gdatRec.gubiRec', 'is required for itipoRec 01/03');
+                } else {
+                    if (!$this->isValidDgiUbiCode($gubiRec['dcodUbi'] ?? null)) {
+                        $this->addPayloadError($errors, 'gdgen.gdatRec.gubiRec.dcodUbi', 'must follow N-N-N format (example 8-8-9)');
+                    }
+                    foreach (['dprov', 'ddistr', 'dcorreg'] as $ubiField) {
+                        if (empty($gubiRec[$ubiField])) {
+                            $this->addPayloadError($errors, 'gdgen.gdatRec.gubiRec.' . $ubiField, 'is required for itipoRec 01/03');
+                        }
+                    }
+                }
+            }
+
+            if ($receiverType === '04') {
+                $gidExt = $receiver['gidExt'] ?? [];
+                if (!is_array($gidExt) || empty($gidExt['didExt'])) {
+                    $this->addPayloadError($errors, 'gdgen.gdatRec.gidExt.didExt', 'is required for itipoRec 04');
+                }
+            }
+        }
+
+        $formaPago = $payload['gtot']['gformaPago'][0] ?? null;
+        if (!is_array($formaPago)) {
+            $this->addPayloadError($errors, 'gtot.gformaPago[0]', 'is required');
+        } else {
+            $iformaPago = (string) ($formaPago['iformaPago'] ?? '');
+            if ($iformaPago === '') {
+                $this->addPayloadError($errors, 'gtot.gformaPago[0].iformaPago', 'is required');
+            }
+            if (!isset($formaPago['dvlrCuota'])) {
+                $this->addPayloadError($errors, 'gtot.gformaPago[0].dvlrCuota', 'is required');
+            }
+            if ($iformaPago === '99' && empty($formaPago['dformaPagoDesc'])) {
+                $this->addPayloadError($errors, 'gtot.gformaPago[0].dformaPagoDesc', 'is required when iformaPago is 99');
+            }
+        }
+
+        $items = $payload['gitem'] ?? [];
+        if (!is_array($items) || empty($items)) {
+            $this->addPayloadError($errors, 'gitem', 'must contain at least one item');
+        } else {
+            foreach ($items as $index => $item) {
+                $itemPath = 'gitem[' . $index . ']';
+                if (!is_array($item)) {
+                    $this->addPayloadError($errors, $itemPath, 'must be an object');
+                    continue;
+                }
+
+                if (empty($item['ddescProd'])) {
+                    $this->addPayloadError($errors, $itemPath . '.ddescProd', 'is required');
+                }
+                if (empty($item['dsecItem'])) {
+                    $this->addPayloadError($errors, $itemPath . '.dsecItem', 'is required');
+                }
+                if (!isset($item['dcantCodInt']) || (float) $item['dcantCodInt'] <= 0) {
+                    $this->addPayloadError($errors, $itemPath . '.dcantCodInt', 'must be greater than 0');
+                }
+                if (!isset($item['gprecios']) || !is_array($item['gprecios'])) {
+                    $this->addPayloadError($errors, $itemPath . '.gprecios', 'is required');
+                }
+
+                if (isset($item['gmedicina'])) {
+                    if (!is_array($item['gmedicina'])) {
+                        $this->addPayloadError($errors, $itemPath . '.gmedicina', 'must be an object');
+                    } else {
+                        $lot = (string) ($item['gmedicina']['dnroLote'] ?? '');
+                        if ($lot === '' || strlen($lot) < 5 || strlen($lot) > 35) {
+                            $this->addPayloadError($errors, $itemPath . '.gmedicina.dnroLote', 'must be 5 to 35 characters');
+                        }
+                        if (!isset($item['gmedicina']['dctLote']) || (float) $item['gmedicina']['dctLote'] <= 0) {
+                            $this->addPayloadError($errors, $itemPath . '.gmedicina.dctLote', 'must be greater than 0');
+                        }
+                    }
+                }
+            }
+        }
+
+        return $errors;
+    }
+
     protected function buildCompatibilityPayload(array $payload): array
     {
         // Some eMagic validations treat nullable fields as required.
@@ -135,6 +278,31 @@ class BillingService
             // instead of dropping them, to preserve the expected payload shape.
             $jsonData = $this->formatSaleDataForBilling($sale, $party);
             $apiKey = $this->resolveApiKeyForSale($sale);
+
+            $payloadErrors = $this->validatePayloadForContract($jsonData);
+            if (!empty($payloadErrors)) {
+                $message = 'Invalid billing payload: ' . implode(' | ', $payloadErrors);
+
+                Log::error('Billing payload validation failed', [
+                    'sale_id' => $sale->id,
+                    'errors' => $payloadErrors,
+                    'request_data' => $jsonData,
+                ]);
+
+                $sale->update([
+                    'meta' => array_merge($sale->meta ?? [], [
+                        'billing_error' => $message,
+                        'billing_status' => 'validation_error',
+                        'billing_date' => now()->toDateTimeString(),
+                    ]),
+                ]);
+
+                return [
+                    'success' => false,
+                    'message' => 'Invalid billing payload',
+                    'error' => $message,
+                ];
+            }
 
             if (empty($apiKey)) {
                 return [
