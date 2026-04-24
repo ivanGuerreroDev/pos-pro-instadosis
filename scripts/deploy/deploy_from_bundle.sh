@@ -10,7 +10,6 @@ BUNDLE_PATH="${BUNDLE_PATH:-}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://pos.instadosis.com}"
 STRICT_HEALTHCHECK="${STRICT_HEALTHCHECK:-false}"
 PHP_BIN="${PHP_BIN:-php}"
-COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 
 if [[ -z "$BUNDLE_PATH" ]]; then
   echo "[ERROR] BUNDLE_PATH is required" >&2
@@ -53,7 +52,7 @@ sudo rsync -a --delete \
   --exclude='node_modules' \
   "$TMP_EXTRACT/" "$APP_DIR/"
 
-# Ensure runtime paths are writable before composer/artisan hooks run.
+# Ensure runtime paths are writable before artisan hooks run.
 # Use php-fpm group for runtime write access (Amazon Linux default: apache).
 FPM_GROUP="$(sudo sed -n 's/^[[:space:]]*group[[:space:]]*=[[:space:]]*//p' /etc/php-fpm.d/www.conf | head -n1)"
 if [[ -z "$FPM_GROUP" ]]; then
@@ -68,8 +67,6 @@ sudo chmod -R ug+rwX "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
 sudo find "$APP_DIR/storage" "$APP_DIR/bootstrap/cache" -type d -exec chmod g+s {} \;
 
 cd "$APP_DIR"
-
-$COMPOSER_BIN install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 
 $PHP_BIN artisan migrate --force
 $PHP_BIN artisan optimize:clear

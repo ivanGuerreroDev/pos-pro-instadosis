@@ -12,6 +12,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+
+      - name: Install production dependencies
+        run: composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
+
       - name: Build source bundle
         run: |
           mkdir -p dist
@@ -20,7 +29,6 @@ jobs:
             --exclude='dist' \
             --exclude='.github' \
             --exclude='node_modules' \
-            --exclude='vendor' \
             --exclude='storage/logs/*' \
             --exclude='storage/framework/cache/*' \
             --exclude='storage/framework/sessions/*' \
