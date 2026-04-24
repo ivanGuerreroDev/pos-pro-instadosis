@@ -61,6 +61,25 @@ class BillingService
         return round((float) $value, $decimals);
     }
 
+    protected function normalizeLotNumber($value, int $batchId): string
+    {
+        $lot = trim((string) $value);
+
+        if ($lot === '') {
+            $lot = 'LOTE-' . $batchId;
+        }
+
+        if (strlen($lot) < 5) {
+            $lot = 'LOT-' . $lot;
+        }
+
+        if (strlen($lot) > 35) {
+            $lot = substr($lot, 0, 35);
+        }
+
+        return $lot;
+    }
+
     protected function isValidDgiUbiCode($value): bool
     {
         if (!is_string($value) || $value === '') {
@@ -697,7 +716,10 @@ class BillingService
                         $remainingTotal -= $batchTotal;
                     }
 
-                    $lotNumber = $batchSaleDetail->batch->batch_number ?? ('LOTE-' . $batchSaleDetail->batch_id);
+                    $lotNumber = $this->normalizeLotNumber(
+                        $batchSaleDetail->batch->batch_number ?? null,
+                        (int) $batchSaleDetail->batch_id
+                    );
 
                     $formattedData['gitem'][] = [
                         'gitbmsitem' => [
@@ -714,7 +736,7 @@ class BillingService
                             'dvalTotItem' => $this->asNumber($batchTotal, 2)
                         ],
                         'gmedicina' => [
-                            'dnroLote' => (string) $lotNumber,
+                            'dnroLote' => $lotNumber,
                             'dctLote' => $this->asNumber($batchQty, 2),
                         ],
                         'dsecItem' => $detailSequence,
