@@ -189,7 +189,7 @@
 
                                 <div class="col-lg-6 mb-2">
                                     <label>{{ __('Coordenadas') }}</label>
-                                    <input type="text" name="dcoordEm" class="form-control" value="{{ $business->invoice_data?->dcoordEm }}" placeholder="{{ __('Enter Coordinates') }}">
+                                    <input type="text" name="dcoordEm" required class="form-control" value="{{ $business->invoice_data?->dcoordEm }}" placeholder="Ej: 8.983300,-79.516700">
                                 </div>
 
                                 <div class="col-lg-6 mb-2">
