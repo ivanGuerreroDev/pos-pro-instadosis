@@ -94,6 +94,50 @@ class BillingService
         $errors[] = $path . ': ' . $message;
     }
 
+    protected function resolveBillingEnvironmentValues(): array
+    {
+        $isLiveMode = $this->isLiveMode();
+
+        $iambOverride = (int) $this->iambOverride;
+        if (!in_array($iambOverride, [1, 2], true) && $this->iambOverride !== null && $this->iambOverride !== '') {
+            Log::warning('Invalid EMAGIC_IAMB override, fallback will be used', [
+                'configured_value' => $this->iambOverride,
+                'fallback_value' => $isLiveMode ? 1 : 2,
+            ]);
+        }
+
+        $iamb = in_array($iambOverride, [1, 2], true) ? $iambOverride : ($isLiveMode ? 1 : 2);
+
+        $denvFeOverride = (int) $this->denvFeOverride;
+        if (!in_array($denvFeOverride, [1, 2], true) && $this->denvFeOverride !== null && $this->denvFeOverride !== '') {
+            Log::warning('Invalid EMAGIC_DENV_FE override, fallback will be used', [
+                'configured_value' => $this->denvFeOverride,
+                'fallback_value' => $iamb,
+            ]);
+        }
+
+        $denvFe = in_array($denvFeOverride, [1, 2], true) ? $denvFeOverride : $iamb;
+
+        return [
+            'iamb' => $iamb,
+            'denvFE' => $denvFe,
+        ];
+    }
+
+    protected function normalizeBillingEnvironmentInPayload(array $payload): array
+    {
+        $env = $this->resolveBillingEnvironmentValues();
+
+        if (!isset($payload['gdgen']) || !is_array($payload['gdgen'])) {
+            $payload['gdgen'] = [];
+        }
+
+        $payload['gdgen']['iamb'] = $env['iamb'];
+        $payload['gdgen']['denvFE'] = $env['denvFE'];
+
+        return $payload;
+    }
+
     protected function validatePayloadForContract(array $payload): array
     {
         $errors = [];
@@ -117,6 +161,16 @@ class BillingService
         $dptoFacDF = (string) ($gdgen['dptoFacDF'] ?? '');
         if ($dptoFacDF === '' || !preg_match('/^\d{3}$/', $dptoFacDF)) {
             $this->addPayloadError($errors, 'gdgen.dptoFacDF', 'must be 3 numeric digits');
+        }
+
+        $iamb = (int) ($gdgen['iamb'] ?? 0);
+        if (!in_array($iamb, [1, 2], true)) {
+            $this->addPayloadError($errors, 'gdgen.iamb', 'must be 1 or 2');
+        }
+
+        $denvFe = (int) ($gdgen['denvFE'] ?? 0);
+        if (!in_array($denvFe, [1, 2], true)) {
+            $this->addPayloadError($errors, 'gdgen.denvFE', 'must be 1 or 2');
         }
 
         $receiver = $gdgen['gdatRec'] ?? [];
@@ -332,6 +386,7 @@ class BillingService
             // eMagic validation is schema-sensitive; keep explicit nullable keys
             // instead of dropping them, to preserve the expected payload shape.
             $jsonData = $this->formatSaleDataForBilling($sale, $party);
+            $jsonData = $this->normalizeBillingEnvironmentInPayload($jsonData);
             $apiKey = $this->resolveApiKeyForSale($sale);
 
             $payloadErrors = $this->validatePayloadForContract($jsonData);
@@ -393,6 +448,7 @@ class BillingService
                 $responseBody = (string) $response->body();
                 if (stripos($responseBody, 'campos obligatorios como nulos') !== false) {
                     $compatPayload = $this->buildCompatibilityPayload($jsonData);
+                    $compatPayload = $this->normalizeBillingEnvironmentInPayload($compatPayload);
 
                     Log::warning('Billing API Retry with compatibility payload', [
                         'sale_id' => $sale->id,
@@ -506,8 +562,9 @@ class BillingService
     protected function formatSaleDataForBilling(Sale $sale, $party = null)
     {
         $isLiveMode = $this->isLiveMode();
-        $iamb = in_array((int) $this->iambOverride, [1, 2], true) ? (int) $this->iambOverride : ($isLiveMode ? 1 : 2);
-        $denvFe = in_array((int) $this->denvFeOverride, [1, 2], true) ? (int) $this->denvFeOverride : $iamb;
+        $env = $this->resolveBillingEnvironmentValues();
+        $iamb = $env['iamb'];
+        $denvFe = $env['denvFE'];
 
         // Get the business and its invoice data
         $business = Business::with('invoice_data')->findOrFail($sale->business_id);
