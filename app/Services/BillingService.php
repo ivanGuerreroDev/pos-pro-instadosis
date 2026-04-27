@@ -80,6 +80,34 @@ class BillingService
         return $lot;
     }
 
+    protected function normalizeDgiPhone($value): ?string
+    {
+        $rawPhone = trim((string) $value);
+        if ($rawPhone === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{3,4}-\d{4}$/', $rawPhone)) {
+            return $rawPhone;
+        }
+
+        $digits = preg_replace('/\D+/', '', $rawPhone);
+        if ($digits === null || $digits === '') {
+            return null;
+        }
+
+        $length = strlen($digits);
+        if ($length === 7) {
+            return substr($digits, 0, 3) . '-' . substr($digits, 3, 4);
+        }
+
+        if ($length === 8) {
+            return substr($digits, 0, 4) . '-' . substr($digits, 4, 4);
+        }
+
+        return null;
+    }
+
     protected function isValidDgiUbiCode($value): bool
     {
         if (!is_string($value) || $value === '') {
@@ -161,6 +189,21 @@ class BillingService
         $dptoFacDF = (string) ($gdgen['dptoFacDF'] ?? '');
         if ($dptoFacDF === '' || !preg_match('/^\d{3}$/', $dptoFacDF)) {
             $this->addPayloadError($errors, 'gdgen.dptoFacDF', 'must be 3 numeric digits');
+        }
+
+        $gemis = $gdgen['gemis'] ?? [];
+        if (!is_array($gemis)) {
+            $this->addPayloadError($errors, 'gdgen.gemis', 'must be an object');
+        } else {
+            $emitterPhones = $gemis['dtfnEm'] ?? [];
+            if (!is_array($emitterPhones) || empty($emitterPhones)) {
+                $this->addPayloadError($errors, 'gdgen.gemis.dtfnEm', 'must include at least one phone');
+            } else {
+                $emitterPhone = (string) ($emitterPhones[0] ?? '');
+                if ($emitterPhone === '' || !preg_match('/^\d{3,4}-\d{4}$/', $emitterPhone)) {
+                    $this->addPayloadError($errors, 'gdgen.gemis.dtfnEm[0]', 'must follow 999-9999 or 9999-9999');
+                }
+            }
         }
 
         $iamb = (int) ($gdgen['iamb'] ?? 0);
@@ -569,6 +612,7 @@ class BillingService
         // Get the business and its invoice data
         $business = Business::with('invoice_data')->findOrFail($sale->business_id);
         $invoiceData = $business->invoice_data;
+        $emitterPhone = $this->normalizeDgiPhone($invoiceData->dtfnEm ?? null);
         
         // Get the customer/party data
         $party = $sale->party_id ? Party::findOrFail($sale->party_id) : $party;
@@ -653,7 +697,7 @@ class BillingService
                 'inatOp' => '01',
                 'gemis' => [
                     'dsucEm' => '0000',
-                    'dtfnEm' => isset($invoiceData->dtfnEm) ? [$invoiceData->dtfnEm] : null,
+                    'dtfnEm' => $emitterPhone ? [$emitterPhone] : null,
                     'dcoordEm' => $invoiceData->dcoordEm ?? '0,0',
                     'dcorElectEmi' => isset($invoiceData->dcorElectEmi) ? [$invoiceData->dcorElectEmi] : null,
                     'gubiEm' => [
