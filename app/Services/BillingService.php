@@ -475,7 +475,7 @@ class BillingService
                                 'Ocp-Apim-Subscription-Key' => $apiKey
                         ])->connectTimeout($this->httpConnectTimeout)
                             ->timeout($this->httpTimeout)
-                            ->post($this->apiUrl."/facturar/v1.1/autorizar", $jsonData);
+                            ->post($this->apiUrl."/facturar/v1.0-release/v1.1/autorizar", $jsonData);
 
             // Debug log for API request and response
             Log::debug('Billing API Request', [
@@ -506,7 +506,7 @@ class BillingService
                         'Ocp-Apim-Subscription-Key' => $apiKey
                     ])->connectTimeout($this->httpConnectTimeout)
                       ->timeout($this->httpTimeout)
-                      ->post($this->apiUrl."/facturar/v1.1/autorizar", $compatPayload);
+                      ->post($this->apiUrl."/facturar/v1.0-release/v1.1/autorizar", $compatPayload);
 
                     Log::debug('Billing API Retry Response', [
                         'sale_id' => $sale->id,
@@ -974,7 +974,7 @@ class BillingService
             ]);
             
             // Crea la URL con el JWT
-            $url = $this->apiUrl . '/facturador-repositorio/' . $repoEnvironment . '/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
+            $url = $this->apiUrl . '/facturar/v1.0-release/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
             
             // Realiza la solicitud con el encabezado requerido
             try {
