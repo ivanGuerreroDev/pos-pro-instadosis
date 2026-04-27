@@ -77,6 +77,10 @@ class AcnooBusinessController extends Controller
 
     public function store(Request $request)
     {
+        $request->merge([
+            'dtfnEm' => $this->normalizeDgiPhoneInput($request->input('dtfnEm')),
+        ]);
+
         $request->validate([
             'address' => 'nullable|max:250',
             'companyName' => 'required|max:250',
@@ -209,6 +213,10 @@ class AcnooBusinessController extends Controller
 
     public function update(Request $request, string $id)
     {
+        $request->merge([
+            'dtfnEm' => $this->normalizeDgiPhoneInput($request->input('dtfnEm')),
+        ]);
+
         $request->validate([
             'address' => 'nullable|max:250',
             'companyName' => 'required|max:250',
@@ -370,6 +378,35 @@ class AcnooBusinessController extends Controller
         return response()->json([
             'message' => __('Business billing status updated successfully.'),
         ]);
+    }
+
+    protected function normalizeDgiPhoneInput($value): ?string
+    {
+        $rawPhone = trim((string) $value);
+        if ($rawPhone === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{3,4}-\d{4}$/', $rawPhone)) {
+            return $rawPhone;
+        }
+
+        $digits = preg_replace('/\D+/', '', $rawPhone);
+        if (!$digits) {
+            return null;
+        }
+
+        $length = strlen($digits);
+        if ($length <= 7) {
+            return substr($digits, 0, 3) . '-' . substr($digits, 3, 4);
+        }
+
+        if ($length >= 8) {
+            $digits = substr($digits, 0, 8);
+            return substr($digits, 0, 4) . '-' . substr($digits, 4, 4);
+        }
+
+        return null;
     }
 
     // Upgrade plan code

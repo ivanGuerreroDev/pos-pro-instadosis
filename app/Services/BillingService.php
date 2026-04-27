@@ -105,6 +105,11 @@ class BillingService
             return substr($digits, 0, 4) . '-' . substr($digits, 4, 4);
         }
 
+        if ($length > 8) {
+            $digits = substr($digits, 0, 8);
+            return substr($digits, 0, 4) . '-' . substr($digits, 4, 4);
+        }
+
         return null;
     }
 

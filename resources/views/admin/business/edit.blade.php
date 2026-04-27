@@ -194,7 +194,7 @@
 
                                 <div class="col-lg-6 mb-2">
                                     <label>{{ __('Teléfono') }}</label>
-                                    <input type="text" name="dtfnEm" required pattern="[0-9]{3,4}-[0-9]{4}" title="Formato requerido: 999-9999 o 9999-9999" class="form-control" value="{{ $business->invoice_data?->dtfnEm }}" placeholder="{{ __('Enter Phone Number') }}">
+                                    <input type="text" name="dtfnEm" required pattern="[0-9]{3,4}-[0-9]{4}" title="Formato requerido: 999-9999 o 9999-9999" class="form-control" value="{{ $business->invoice_data?->dtfnEm }}" placeholder="0000-0000" inputmode="numeric" autocomplete="off" maxlength="9">
                                 </div>
 
                                 <div class="col-lg-12">
@@ -217,6 +217,29 @@
     <script src="{{ asset('assets/js/custom/custom.js') }}"></script>
     <script>
     $(document).ready(function() {
+        function formatDgiPhoneInput(value) {
+            let digits = (value || '').replace(/\D/g, '');
+            if (digits.length > 8) {
+                digits = digits.substring(0, 8);
+            }
+
+            if (digits.length <= 3) {
+                return digits;
+            }
+
+            if (digits.length <= 7) {
+                return digits.substring(0, 3) + '-' + digits.substring(3);
+            }
+
+            return digits.substring(0, 4) + '-' + digits.substring(4, 8);
+        }
+
+        const $fiscalPhone = $('input[name="dtfnEm"]');
+        $fiscalPhone.on('input blur', function() {
+            $(this).val(formatDgiPhoneInput($(this).val()));
+        });
+        $fiscalPhone.val(formatDgiPhoneInput($fiscalPhone.val()));
+
         // Existing RUC type handler
         $('select[name="dtipoRuc"]').on('change', function() {
             if($(this).val() == 'Jurídico') {
