@@ -96,7 +96,7 @@ class AcnooBusinessController extends Controller
             'dcorreg' => 'nullable|string',
             'ddistr' => 'nullable|string',
             'dprov' => 'nullable|string',
-            'dtfnEm' => 'nullable|string',
+            'dtfnEm' => ['required', 'regex:/^[0-9]{3,4}-[0-9]{4}$/'],
             'dcorElectEmi' => 'nullable|email'
         ]);
 
@@ -153,7 +153,10 @@ class AcnooBusinessController extends Controller
             }
 
             // Create invoice data
-            $request->merge(['dcodUbi' => $request->dcorreg]);
+            $request->merge([
+                'dcodUbi' => $request->dcorreg,
+                'dcorElectEmi' => $request->input('email'),
+            ]);
             $business->invoice_data()->create($request->only([
                 'dtipoRuc', 'druc', 'ddv', 'dnombEm', 'dcoordEm', 
                 'ddirecEm', 'dcodUbi', 'dcorreg', 'ddistr', 'dprov',
@@ -225,7 +228,7 @@ class AcnooBusinessController extends Controller
             'dcorreg' => 'nullable|string',
             'ddistr' => 'nullable|string',
             'dprov' => 'nullable|string',
-            'dtfnEm' => 'nullable|string',
+            'dtfnEm' => ['required', 'regex:/^[0-9]{3,4}-[0-9]{4}$/'],
             'dcorElectEmi' => 'nullable|email',
             'billing_status' => 'nullable|in:' . Business::BILLING_STATUS_PENDING . ',' . Business::BILLING_STATUS_ACTIVE,
             'emagic_api_key' => 'nullable|string|min:20',
@@ -293,7 +296,10 @@ class AcnooBusinessController extends Controller
             }
 
             // Update or create invoice data
-            $request->merge(['dcodUbi' => $request->dcorreg]);
+            $request->merge([
+                'dcodUbi' => $request->dcorreg,
+                'dcorElectEmi' => $request->input('email'),
+            ]);
             $business->invoice_data()->updateOrCreate(
                 ['business_id' => $business->id],
                 $request->only([

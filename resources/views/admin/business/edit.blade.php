@@ -63,7 +63,7 @@
 
                                 <div class="col-lg-6 mb-2">
                                     <label>{{ __('Email') }}</label>
-                                    <input type="email" name="email" value="{{ $user->email }}" class="form-control" placeholder="{{ __('Enter Email') }}">
+                                    <input type="email" name="email" value="{{ $user->email }}" required class="form-control" placeholder="{{ __('Enter Email') }}">
                                 </div>
 
                                 <div class="col-lg-6 mb-2">
@@ -194,12 +194,7 @@
 
                                 <div class="col-lg-6 mb-2">
                                     <label>{{ __('Teléfono') }}</label>
-                                    <input type="text" name="dtfnEm" class="form-control" value="{{ $business->invoice_data?->dtfnEm }}" placeholder="{{ __('Enter Phone Number') }}">
-                                </div>
-
-                                <div class="col-lg-6 mb-2">
-                                    <label>{{ __('Correo Electrónico') }}</label>
-                                    <input type="email" name="dcorElectEmi" class="form-control" value="{{ $business->invoice_data?->dcorElectEmi }}" placeholder="{{ __('Enter Email') }}">
+                                    <input type="text" name="dtfnEm" required pattern="[0-9]{3,4}-[0-9]{4}" title="Formato requerido: 999-9999 o 9999-9999" class="form-control" value="{{ $business->invoice_data?->dtfnEm }}" placeholder="{{ __('Enter Phone Number') }}">
                                 </div>
 
                                 <div class="col-lg-12">
