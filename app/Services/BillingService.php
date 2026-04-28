@@ -833,7 +833,6 @@ class BillingService
                             'dvalITBMS' => $this->asNumber($batchVat, 6)
                         ],
                         'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
-                        'cunidad' => 'UND',
                         'ddescProd' => $product->productName,
                         'dcantCodInt' => $this->asNumber($batchQty, 2),
                         'gprecios' => [
@@ -860,7 +859,6 @@ class BillingService
                     'dvalITBMS' => $this->asNumber($vatAmount, 6)
                 ],
                 'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
-                'cunidad' => 'UND',
                 'ddescProd' => $product->productName,
                 'dcantCodInt' => $this->asNumber($quantity, 2),
                 'gprecios' => [
@@ -974,7 +972,7 @@ class BillingService
             ]);
             
             // Crea la URL con el JWT
-            $url = $this->apiUrl . '/facturar/v1.0-release/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=005';
+            $url = $this->apiUrl . '/facturar/v1.0-release/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=018';
             
             // Realiza la solicitud con el encabezado requerido
             try {
