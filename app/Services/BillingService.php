@@ -740,7 +740,7 @@ class BillingService
             'gtot' => [
                 'gformaPago' => [
                     [
-                        'dvlrCuota' => $this->asNumber($sale->totalAmount, 2),
+                        'dvlrCuota' => number_format((float) $sale->totalAmount, 2, '.', ''),
                         'iformaPago' => $paymentMethod
                     ]
                 ],
