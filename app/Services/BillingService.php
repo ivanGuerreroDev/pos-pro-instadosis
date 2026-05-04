@@ -61,6 +61,38 @@ class BillingService
         return round((float) $value, $decimals);
     }
 
+    protected function extractBillingResponseMessage(array $responseData): string
+    {
+        $messageKeys = ['message', 'mensaje', 'status', 'estado', 'detail'];
+
+        foreach ($messageKeys as $key) {
+            if (!array_key_exists($key, $responseData)) {
+                continue;
+            }
+
+            $value = $responseData[$key];
+            if (is_scalar($value)) {
+                return trim((string) $value);
+            }
+        }
+
+        return '';
+    }
+
+    protected function isBillingResponseAuthorized(array $responseData): bool
+    {
+        $message = strtoupper($this->extractBillingResponseMessage($responseData));
+        if ($message === '') {
+            return false;
+        }
+
+        if (str_contains($message, 'NO AUTORIZADO') || str_contains($message, 'RECHAZ')) {
+            return false;
+        }
+
+        return str_contains($message, 'AUTORIZADO');
+    }
+
     protected function normalizeLotNumber($value, int $batchId): string
     {
         $lot = trim((string) $value);
@@ -520,6 +552,40 @@ class BillingService
             if ($response->successful()) {
                 // Get the response data
                 $responseData = $response->json();
+                if (!is_array($responseData)) {
+                    $responseData = [];
+                }
+
+                $billingResponseMessage = $this->extractBillingResponseMessage($responseData);
+                $isAuthorized = $this->isBillingResponseAuthorized($responseData);
+
+                if (!$isAuthorized) {
+                    $notAuthorizedMessage = $billingResponseMessage !== ''
+                        ? $billingResponseMessage
+                        : 'NO AUTORIZADO';
+
+                    Log::warning('Billing API response was not authorized', [
+                        'sale_id' => $sale->id,
+                        'status' => $response->status(),
+                        'message' => $notAuthorizedMessage,
+                        'body' => $responseData,
+                    ]);
+
+                    $sale->update([
+                        'meta' => array_merge($sale->meta ?? [], [
+                            'billing_error' => $notAuthorizedMessage,
+                            'billing_status' => 'not_authorized',
+                            'billing_date' => now()->toDateTimeString(),
+                        ]),
+                    ]);
+
+                    return [
+                        'success' => false,
+                        'message' => 'Invoice not authorized',
+                        'error' => $notAuthorizedMessage,
+                        'data' => $responseData,
+                    ];
+                }
                 
                 // Extract dId from xmlFirmado if available
                 $xmlContent = $responseData['xmlFirmado'] ?? null;
@@ -544,6 +610,7 @@ class BillingService
                 $sale->update([
                     'meta' => array_merge($sale->meta ?? [], [
                         'billing_status' => 'success',
+                        'billing_error' => null,
                         'billing_date' => now()->toDateTimeString()
                     ])
                 ]);
@@ -744,11 +811,11 @@ class BillingService
                         'iformaPago' => $paymentMethod
                     ]
                 ],
-                'dvtot' => $this->asNumber($sale->totalAmount, 2),
-                'dtotITBMS' => $this->asNumber($sale->vat_amount ?? 0, 2),
-                'dtotRec' => $this->asNumber($sale->totalAmount, 2),
-                'dtotNeto' => $this->asNumber($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
-                'dtotGravado' => $this->asNumber($sale->vat_amount ?? 0, 2),
+                'dvtot' => number_format((float) $sale->totalAmount, 2, '.', ''),
+                'dtotITBMS' => number_format((float) ($sale->vat_amount ?? 0), 2, '.', ''),
+                'dtotRec' => number_format((float) $sale->totalAmount, 2, '.', ''),
+                'dtotNeto' => number_format((float) ($sale->totalAmount - ($sale->vat_amount ?? 0)), 2, '.', ''),
+                'dtotGravado' => number_format((float) ($sale->vat_amount ?? 0), 2, '.', ''),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
                 'dvtotItems' => $this->asNumber($sale->totalAmount, 2)
@@ -894,6 +961,17 @@ class BillingService
         $sale = Sale::find($saleId);
         if (!$sale) {
             return null;
+        }
+
+        $meta = (array) ($sale->meta ?? []);
+        $billingStatus = (string) ($meta['billing_status'] ?? '');
+        if ($billingStatus !== 'success') {
+            Log::warning('Billing PDF blocked: billing not authorized', [
+                'sale_id' => $saleId,
+                'billing_status' => $billingStatus,
+                'billing_error' => $meta['billing_error'] ?? null,
+            ]);
+            return false;
         }
 
         $apiKey = $this->resolveApiKeyForSale($sale);
