@@ -61,6 +61,11 @@ class BillingService
         return round((float) $value, $decimals);
     }
 
+    protected function asDecimalString($value, int $decimals = 2): string
+    {
+        return number_format((float) $value, $decimals, '.', '');
+    }
+
     protected function extractBillingResponseMessage(array $responseData): string
     {
         $messageKeys = ['message', 'mensaje', 'status', 'estado', 'detail'];
@@ -818,7 +823,7 @@ class BillingService
                 'dtotGravado' => number_format((float) ($sale->vat_amount ?? 0), 2, '.', ''),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
-                'dvtotItems' => $this->asNumber($sale->totalAmount, 2)
+                'dvtotItems' => $this->asDecimalString($sale->totalAmount, 2)
             ]
         ];
 

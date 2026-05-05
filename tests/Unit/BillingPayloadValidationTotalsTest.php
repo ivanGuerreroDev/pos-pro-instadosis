@@ -60,6 +60,18 @@ class BillingPayloadValidationTotalsTest extends TestCase
         $this->assertHasError($errors, 'gtot.dvtotItems');
     }
 
+    public function test_decimal_formatter_keeps_two_decimals_for_payload_totals(): void
+    {
+        $service = app(BillingService::class);
+        $reflection = new ReflectionClass($service);
+        $method = $reflection->getMethod('asDecimalString');
+        $method->setAccessible(true);
+
+        $formatted = $method->invoke($service, 2, 2);
+
+        $this->assertSame('2.00', $formatted);
+    }
+
     private function basePayload(): array
     {
         return [
@@ -67,6 +79,11 @@ class BillingPayloadValidationTotalsTest extends TestCase
                 'dnroDF' => '0000000001',
                 'dseg' => '000000001',
                 'dptoFacDF' => '001',
+                'gemis' => [
+                    'dtfnEm' => ['5555-5555'],
+                ],
+                'iamb' => 1,
+                'denvFE' => 1,
                 'gdatRec' => [
                     'itipoRec' => '02',
                     'cpaisRec' => 'PA',
