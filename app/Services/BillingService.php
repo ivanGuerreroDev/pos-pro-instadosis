@@ -66,6 +66,19 @@ class BillingService
         return number_format((float) $value, $decimals, '.', '');
     }
 
+    protected function formatDecimalFields(array $values, array $fieldDecimals): array
+    {
+        foreach ($fieldDecimals as $field => $decimals) {
+            if (!array_key_exists($field, $values) || $values[$field] === null) {
+                continue;
+            }
+
+            $values[$field] = $this->asDecimalString($values[$field], $decimals);
+        }
+
+        return $values;
+    }
+
     protected function extractBillingResponseMessage(array $responseData): string
     {
         $messageKeys = ['message', 'mensaje', 'status', 'estado', 'detail'];
@@ -812,15 +825,15 @@ class BillingService
             'gtot' => [
                 'gformaPago' => [
                     [
-                        'dvlrCuota' => number_format((float) $sale->totalAmount, 2, '.', ''),
+                        'dvlrCuota' => $this->asDecimalString($sale->totalAmount, 2),
                         'iformaPago' => $paymentMethod
                     ]
                 ],
-                'dvtot' => number_format((float) $sale->totalAmount, 2, '.', ''),
-                'dtotITBMS' => number_format((float) ($sale->vat_amount ?? 0), 2, '.', ''),
-                'dtotRec' => number_format((float) $sale->totalAmount, 2, '.', ''),
-                'dtotNeto' => number_format((float) ($sale->totalAmount - ($sale->vat_amount ?? 0)), 2, '.', ''),
-                'dtotGravado' => number_format((float) ($sale->vat_amount ?? 0), 2, '.', ''),
+                'dvtot' => $this->asDecimalString($sale->totalAmount, 2),
+                'dtotITBMS' => $this->asDecimalString($sale->vat_amount ?? 0, 2),
+                'dtotRec' => $this->asDecimalString($sale->totalAmount, 2),
+                'dtotNeto' => $this->asDecimalString($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
+                'dtotGravado' => $this->asDecimalString($sale->vat_amount ?? 0, 2),
                 'dnroItems' => count($saleDetails),
                 'ipzPag' => 1,
                 'dvtotItems' => $this->asDecimalString($sale->totalAmount, 2)
@@ -828,7 +841,7 @@ class BillingService
         ];
 
         if ((float) ($sale->discountAmount ?? 0) > 0) {
-            $formattedData['gtot']['dtotDesc'] = $this->asNumber($sale->discountAmount, 2);
+            $formattedData['gtot']['dtotDesc'] = $this->asDecimalString($sale->discountAmount, 2);
         }
 
         if ($paymentMethod === '99') {
@@ -839,7 +852,7 @@ class BillingService
             $formattedData['gtot']['gdescBonif'] = [
                 [
                     'dDescProd' => 'DESCUENTO GENERAL',
-                    'dValDesc' => $this->asNumber($sale->discountAmount, 2),
+                    'dValDesc' => $this->asDecimalString($sale->discountAmount, 2),
                 ],
             ];
         }
@@ -900,18 +913,24 @@ class BillingService
                     );
 
                     $formattedData['gitem'][] = [
-                        'gitbmsitem' => [
-                            'dtasaITBMS' => '01', // Standard rate
-                            'dvalITBMS' => $this->asNumber($batchVat, 6)
-                        ],
+                        'gitbmsitem' => $this->formatDecimalFields([
+                            'dtasaITBMS' => '01',
+                            'dvalITBMS' => $batchVat,
+                        ], [
+                            'dvalITBMS' => 6,
+                        ]),
                         'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
                         'ddescProd' => $product->productName,
                         'dcantCodInt' => $this->asNumber($batchQty, 2),
-                        'gprecios' => [
-                            'dprItem' => $this->asNumber($batchSubtotal, 6),
-                            'dprUnit' => $this->asNumber($unitNetPrice, 6),
-                            'dvalTotItem' => $this->asNumber($batchTotal, 2)
-                        ],
+                        'gprecios' => $this->formatDecimalFields([
+                            'dprItem' => $batchSubtotal,
+                            'dprUnit' => $unitNetPrice,
+                            'dvalTotItem' => $batchTotal,
+                        ], [
+                            'dprItem' => 6,
+                            'dprUnit' => 6,
+                            'dvalTotItem' => 2,
+                        ]),
                         'gmedicina' => [
                             'dnroLote' => $lotNumber,
                             'dctLote' => $this->asNumber($batchQty, 2),
@@ -926,18 +945,24 @@ class BillingService
             }
             
             $formattedData['gitem'][] = [
-                'gitbmsitem' => [
-                    'dtasaITBMS' => '01', // Standard rate
-                    'dvalITBMS' => $this->asNumber($vatAmount, 6)
-                ],
+                'gitbmsitem' => $this->formatDecimalFields([
+                    'dtasaITBMS' => '01',
+                    'dvalITBMS' => $vatAmount,
+                ], [
+                    'dvalITBMS' => 6,
+                ]),
                 'dcodProd' => $product->productCode ?? ('PROD-' . $product->id),
                 'ddescProd' => $product->productName,
                 'dcantCodInt' => $this->asNumber($quantity, 2),
-                'gprecios' => [
-                    'dprItem' => $this->asNumber($lineSubtotal, 6),
-                    'dprUnit' => $this->asNumber($unitNetPrice, 6),
-                    'dvalTotItem' => $this->asNumber($lineTotal, 2)
-                ],
+                'gprecios' => $this->formatDecimalFields([
+                    'dprItem' => $lineSubtotal,
+                    'dprUnit' => $unitNetPrice,
+                    'dvalTotItem' => $lineTotal,
+                ], [
+                    'dprItem' => 6,
+                    'dprUnit' => 6,
+                    'dvalTotItem' => 2,
+                ]),
                 'dsecItem' => $detailSequence
             ];
 

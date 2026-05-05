@@ -72,6 +72,54 @@ class BillingPayloadValidationTotalsTest extends TestCase
         $this->assertSame('2.00', $formatted);
     }
 
+    public function test_decimal_field_formatter_normalizes_requested_totals_and_item_amounts(): void
+    {
+        $service = app(BillingService::class);
+        $reflection = new ReflectionClass($service);
+        $method = $reflection->getMethod('formatDecimalFields');
+        $method->setAccessible(true);
+
+        $formattedTotals = $method->invoke($service, [
+            'dvtot' => 2.5,
+            'dtotITBMS' => 0,
+            'dtotRec' => 2.5,
+            'dtotNeto' => 2.5,
+            'dtotGravado' => 0,
+            'dvtotItems' => 2.5,
+        ], [
+            'dvtot' => 2,
+            'dtotITBMS' => 2,
+            'dtotRec' => 2,
+            'dtotNeto' => 2,
+            'dtotGravado' => 2,
+            'dvtotItems' => 2,
+        ]);
+
+        $this->assertSame('2.50', $formattedTotals['dvtot']);
+        $this->assertSame('0.00', $formattedTotals['dtotITBMS']);
+        $this->assertSame('2.50', $formattedTotals['dtotRec']);
+        $this->assertSame('2.50', $formattedTotals['dtotNeto']);
+        $this->assertSame('0.00', $formattedTotals['dtotGravado']);
+        $this->assertSame('2.50', $formattedTotals['dvtotItems']);
+
+        $formattedPrices = $method->invoke($service, [
+            'dprItem' => 2.5,
+            'dprUnit' => 2.5,
+            'dvalTotItem' => 2.5,
+            'dvalITBMS' => 0,
+        ], [
+            'dprItem' => 6,
+            'dprUnit' => 6,
+            'dvalTotItem' => 2,
+            'dvalITBMS' => 6,
+        ]);
+
+        $this->assertSame('2.500000', $formattedPrices['dprItem']);
+        $this->assertSame('2.500000', $formattedPrices['dprUnit']);
+        $this->assertSame('2.50', $formattedPrices['dvalTotItem']);
+        $this->assertSame('0.000000', $formattedPrices['dvalITBMS']);
+    }
+
     private function basePayload(): array
     {
         return [
