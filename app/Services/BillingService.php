@@ -79,6 +79,28 @@ class BillingService
         return $values;
     }
 
+    protected function buildBillingTotals(float $totalAmount, float $totalItbms, float $totalIsc, int $itemCount): array
+    {
+        $totalNet = $totalAmount - $totalItbms - $totalIsc;
+        $totalGravado = $totalNet + $totalItbms + $totalIsc;
+
+        return [
+            'gformaPago' => [
+                [
+                    'dvlrCuota' => $this->asDecimalString($totalAmount, 2),
+                ],
+            ],
+            'dvtot' => $this->asDecimalString($totalAmount, 2),
+            'dtotITBMS' => $this->asDecimalString($totalItbms, 2),
+            'dtotRec' => $this->asDecimalString($totalAmount, 2),
+            'dtotNeto' => $this->asDecimalString($totalNet, 2),
+            'dtotGravado' => $this->asDecimalString($totalGravado, 2),
+            'dnroItems' => $itemCount,
+            'ipzPag' => 1,
+            'dvtotItems' => $this->asDecimalString($totalAmount, 2),
+        ];
+    }
+
     protected function extractBillingResponseMessage(array $responseData): string
     {
         $messageKeys = ['message', 'mensaje', 'status', 'estado', 'detail'];
@@ -781,6 +803,9 @@ class BillingService
 
         $receiverData = $this->removeNullValues($receiverData);
 
+        $totalAmount = (float) $sale->totalAmount;
+        $totalItbms = (float) ($sale->vat_amount ?? 0);
+        $totalIsc = (float) ($sale->isc_amount ?? 0);
         $formattedData = [
             'gitem' => [],
             'gdgen' => [
@@ -822,22 +847,17 @@ class BillingService
                 'idoc' => $documentType
             ],
             'dverForm' => '1.00',
-            'gtot' => [
-                'gformaPago' => [
-                    [
-                        'dvlrCuota' => $this->asDecimalString($sale->totalAmount, 2),
-                        'iformaPago' => $paymentMethod
-                    ]
-                ],
-                'dvtot' => $this->asDecimalString($sale->totalAmount, 2),
-                'dtotITBMS' => $this->asDecimalString($sale->vat_amount ?? 0, 2),
-                'dtotRec' => $this->asDecimalString($sale->totalAmount, 2),
-                'dtotNeto' => $this->asDecimalString($sale->totalAmount - ($sale->vat_amount ?? 0), 2),
-                'dtotGravado' => $this->asDecimalString($sale->vat_amount ?? 0, 2),
-                'dnroItems' => count($saleDetails),
-                'ipzPag' => 1,
-                'dvtotItems' => $this->asDecimalString($sale->totalAmount, 2)
-            ]
+            'gtot' => array_merge(
+                $this->buildBillingTotals($totalAmount, $totalItbms, $totalIsc, count($saleDetails)),
+                [
+                    'gformaPago' => [
+                        [
+                            'dvlrCuota' => $this->asDecimalString($totalAmount, 2),
+                            'iformaPago' => $paymentMethod,
+                        ],
+                    ],
+                ]
+            )
         ];
 
         if ((float) ($sale->discountAmount ?? 0) > 0) {
