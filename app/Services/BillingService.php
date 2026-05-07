@@ -82,7 +82,7 @@ class BillingService
     protected function buildBillingTotals(float $totalAmount, float $totalItbms, float $totalIsc, int $itemCount): array
     {
         $totalNet = $totalAmount - $totalItbms - $totalIsc;
-        $totalGravado = $totalNet + $totalItbms + $totalIsc;
+        $totalGravado = ($totalItbms > 0 || $totalIsc > 0) ? $totalNet : 0.0;
 
         return [
             'gformaPago' => [

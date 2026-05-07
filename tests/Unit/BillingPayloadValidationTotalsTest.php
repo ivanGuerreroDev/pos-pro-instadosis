@@ -120,7 +120,7 @@ class BillingPayloadValidationTotalsTest extends TestCase
         $this->assertSame('0.000000', $formattedPrices['dvalITBMS']);
     }
 
-    public function test_build_billing_totals_sets_dtot_gravado_as_neto_plus_itbms_plus_isc(): void
+    public function test_build_billing_totals_sets_dtot_gravado_to_zero_when_no_tax_applies(): void
     {
         $service = app(BillingService::class);
         $reflection = new ReflectionClass($service);
@@ -133,8 +133,25 @@ class BillingPayloadValidationTotalsTest extends TestCase
         $this->assertSame('0.00', $totals['dtotITBMS']);
         $this->assertSame('2.50', $totals['dtotRec']);
         $this->assertSame('2.50', $totals['dtotNeto']);
-        $this->assertSame('2.50', $totals['dtotGravado']);
+        $this->assertSame('0.00', $totals['dtotGravado']);
         $this->assertSame('2.50', $totals['dvtotItems']);
+    }
+
+    public function test_build_billing_totals_sets_dtot_gravado_to_neto_when_tax_applies(): void
+    {
+        $service = app(BillingService::class);
+        $reflection = new ReflectionClass($service);
+        $method = $reflection->getMethod('buildBillingTotals');
+        $method->setAccessible(true);
+
+        $totals = $method->invoke($service, 10.70, 0.70, 0.0, 1);
+
+        $this->assertSame('10.70', $totals['dvtot']);
+        $this->assertSame('0.70', $totals['dtotITBMS']);
+        $this->assertSame('10.70', $totals['dtotRec']);
+        $this->assertSame('10.00', $totals['dtotNeto']);
+        $this->assertSame('10.00', $totals['dtotGravado']);
+        $this->assertSame('10.70', $totals['dvtotItems']);
     }
 
     private function basePayload(): array
