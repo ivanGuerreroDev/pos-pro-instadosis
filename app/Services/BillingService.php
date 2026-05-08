@@ -79,6 +79,18 @@ class BillingService
         return $values;
     }
 
+    protected function resolveItbmsRateCode($taxRate): string
+    {
+        $normalizedRate = rtrim(rtrim(number_format((float) $taxRate, 2, '.', ''), '0'), '.');
+
+        return match ($normalizedRate) {
+            '7' => '01',
+            '10' => '02',
+            '15' => '03',
+            default => '00',
+        };
+    }
+
     protected function buildBillingTotals(float $totalAmount, float $totalItbms, float $totalIsc, int $itemCount): array
     {
         $totalNet = $totalAmount - $totalItbms - $totalIsc;
@@ -894,6 +906,7 @@ class BillingService
             $vatAmount = (float) ($detail->tax_amount ?? 0);
             $lineTotal = (float) ($detail->total ?? ($lineSubtotal + $vatAmount));
             $unitNetPrice = $lineSubtotal / $quantity;
+            $itemTaxRate = $detail->tax_rate ?? $product->tax_rate ?? '0';
 
             $isMedicineByBatch = (int) ($product->is_medicine ?? 0) === 1
                 && (int) ($product->track_by_batches ?? 0) === 1
@@ -934,7 +947,7 @@ class BillingService
 
                     $formattedData['gitem'][] = [
                         'gitbmsitem' => $this->formatDecimalFields([
-                            'dtasaITBMS' => '01',
+                            'dtasaITBMS' => $this->resolveItbmsRateCode($itemTaxRate),
                             'dvalITBMS' => $batchVat,
                         ], [
                             'dvalITBMS' => 6,
@@ -966,7 +979,7 @@ class BillingService
             
             $formattedData['gitem'][] = [
                 'gitbmsitem' => $this->formatDecimalFields([
-                    'dtasaITBMS' => '01',
+                    'dtasaITBMS' => $this->resolveItbmsRateCode($itemTaxRate),
                     'dvalITBMS' => $vatAmount,
                 ], [
                     'dvalITBMS' => 6,

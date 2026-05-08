@@ -120,6 +120,21 @@ class BillingPayloadValidationTotalsTest extends TestCase
         $this->assertSame('0.000000', $formattedPrices['dvalITBMS']);
     }
 
+    public function test_itbms_rate_code_matches_configured_tax_rate(): void
+    {
+        $service = app(BillingService::class);
+        $reflection = new ReflectionClass($service);
+        $method = $reflection->getMethod('resolveItbmsRateCode');
+        $method->setAccessible(true);
+
+        $this->assertSame('00', $method->invoke($service, 0));
+        $this->assertSame('00', $method->invoke($service, '0'));
+        $this->assertSame('01', $method->invoke($service, 7));
+        $this->assertSame('01', $method->invoke($service, '7.00'));
+        $this->assertSame('02', $method->invoke($service, 10));
+        $this->assertSame('03', $method->invoke($service, 15));
+    }
+
     public function test_build_billing_totals_sets_dtot_gravado_to_zero_when_no_tax_applies(): void
     {
         $service = app(BillingService::class);
