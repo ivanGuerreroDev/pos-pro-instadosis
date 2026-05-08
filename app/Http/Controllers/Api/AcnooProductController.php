@@ -40,15 +40,21 @@ class AcnooProductController extends Controller
             'track_by_batches' => 'nullable|boolean',
             'is_medicine' => 'nullable|boolean',
             'tax_rate' => 'nullable|in:0,7,10,15',
+            'productStock' => 'nullable|numeric|min:0',
         ]);
 
-        $data = Product::create($request->except('productPicture') + [
+        $productStock = $request->filled('productStock')
+            ? (int) $request->input('productStock')
+            : 0;
+
+        $data = Product::create(array_merge($request->except('productPicture'), [
                     'productPicture' => $request->productPicture ? $this->upload($request, 'productPicture') : NULL,
                     'business_id' => auth()->user()->business_id,
+                    'productStock' => $productStock,
                     'track_by_batches' => $request->track_by_batches ?? false,
                     'is_medicine' => $request->is_medicine ?? false,
                     'tax_rate' => $request->tax_rate ?? '0',
-                ]);
+            ]));
 
         return response()->json([
             'message' => __('Data saved successfully.'),
@@ -70,11 +76,11 @@ class AcnooProductController extends Controller
             'tax_rate' => 'nullable|in:0,7,10,15',
         ]);
 
-        $product = $product->update($request->except('productPicture') + [
+        $product = $product->update(array_merge($request->except('productPicture'), [
             'productPicture' => $request->productPicture ? $this->upload($request, 'productPicture', $product->productPicture) : $product->productPicture,
             'is_medicine' => $request->is_medicine ?? $product->is_medicine,
             'tax_rate' => $request->tax_rate ?? $product->tax_rate,
-        ]);
+        ]));
 
         return response()->json([
             'message' => __('Data saved successfully.'),
