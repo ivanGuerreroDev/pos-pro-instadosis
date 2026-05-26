@@ -1113,7 +1113,8 @@ class BillingService
             ]);
             
             // Crea la URL con el JWT
-            $url = $this->apiUrl . '/facturar/v1.0-release/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=018';
+            // $url = $this->apiUrl . '/facturar/v1.0-release/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=018';
+            $url = $this->apiUrl . '/facturar/v1.0-release/v2/comprobante/' . $jwt . '/file-type/pdf?codigoPlantilla=020';
             
             // Realiza la solicitud con el encabezado requerido
             try {
