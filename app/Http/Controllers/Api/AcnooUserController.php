@@ -53,6 +53,7 @@ class AcnooUserController extends Controller
                         'salesListPermission' => $request->salesListPermission == 'true' ? true : false,
                         'stockPermission' => $request->stockPermission == 'true' ? true : false,
                         'addIncomePermission' => $request->addIncomePermission == 'true' ? true : false,
+                        'cashRegisterPermission' => $request->cashRegisterPermission == 'true' ? true : false,
                     ]
                 ]);
 
@@ -91,6 +92,7 @@ class AcnooUserController extends Controller
                 'salePermission' => $request->salePermission == 'true' ? true : false,
                 'salesListPermission' => $request->salesListPermission == 'true' ? true : false,
                 'stockPermission' => $request->stockPermission == 'true' ? true : false,
+                'cashRegisterPermission' => $request->cashRegisterPermission == 'true' ? true : false,
             ]
         ]);
 

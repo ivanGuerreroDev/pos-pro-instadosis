@@ -30,6 +30,7 @@ class SaleManualBatchAllocationValidationTest extends TestCase
 
         [$user, $product, $expiredBatch] = $this->createAuthenticatedContext();
         Sanctum::actingAs($user);
+        $this->postJson('/api/v1/cash-registers', ['opening_balance' => 0])->assertOk();
 
         $response = $this->postJson('/api/v1/sales', [
             'customer_name' => 'Cliente Ocasional',

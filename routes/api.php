@@ -68,6 +68,10 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('income-categories', Api\AcnooIncomeCategoryController::class)->except('show');
         Route::apiResource('incomes', Api\AcnooIncomeController::class)->only('index', 'store');
 
+        Route::get('cash-registers/current', [Api\AcnooCashRegisterController::class, 'current']);
+        Route::post('cash-registers/{cashRegister}/close', [Api\AcnooCashRegisterController::class, 'close']);
+        Route::apiResource('cash-registers', Api\AcnooCashRegisterController::class)->only('index', 'store', 'show');
+
         Route::get('locations/provinces', [Api\DgiUbiCodesController::class, 'getProvinces']);
         Route::get('locations/districts/{province}', [Api\DgiUbiCodesController::class, 'getDistricts']);
         Route::get('locations/townships/{district}', [Api\DgiUbiCodesController::class, 'getTownships']);

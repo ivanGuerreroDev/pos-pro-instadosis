@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Business;
 use App\Models\SaleDetails;
 use App\Models\BatchSaleDetail;
+use App\Models\CashRegister;
 use App\Services\BillingService;
 use App\Services\BatchService;
 use App\Services\BatchAllocationService;
@@ -18,6 +19,23 @@ use Illuminate\Support\Facades\Schema;
 
 class AcnooSaleController extends Controller
 {
+    protected function ensureOpenCashRegisterOrFail()
+    {
+        $hasOpenCashRegister = CashRegister::where('business_id', auth()->user()->business_id)
+            ->where('user_id', auth()->id())
+            ->where('status', CashRegister::STATUS_OPEN)
+            ->exists();
+
+        if (!$hasOpenCashRegister) {
+            return response()->json([
+                'message' => __('No hay una caja abierta. Debes abrir caja antes de vender.'),
+                'cash_register_required' => true,
+            ], 403);
+        }
+
+        return null;
+    }
+
     protected function ensureBillingLinkedOrFail()
     {
         $selectColumns = ['id', 'emagic_api_key'];
@@ -74,6 +92,11 @@ class AcnooSaleController extends Controller
     )
     {
         $guardResponse = $this->ensureBillingLinkedOrFail();
+        if ($guardResponse) {
+            return $guardResponse;
+        }
+
+        $guardResponse = $this->ensureOpenCashRegisterOrFail();
         if ($guardResponse) {
             return $guardResponse;
         }

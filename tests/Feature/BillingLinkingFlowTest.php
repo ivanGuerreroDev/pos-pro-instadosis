@@ -116,6 +116,7 @@ class BillingLinkingFlowTest extends TestCase
     {
         $user = $this->createShopOwnerWithBusiness(Business::BILLING_STATUS_ACTIVE, '2423098a70f3496d8e8a9d5f8b582034');
         Sanctum::actingAs($user);
+        $this->postJson('/api/v1/cash-registers', ['opening_balance' => 0])->assertOk();
 
         $response = $this->postJson('/api/v1/sales', []);
 
