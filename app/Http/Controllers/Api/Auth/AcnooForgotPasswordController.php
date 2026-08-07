@@ -7,6 +7,7 @@ use App\Mail\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class AcnooForgotPasswordController extends Controller
@@ -37,8 +38,13 @@ class AcnooForgotPasswordController extends Controller
             ]);
 
         } catch (\Exception $exception){
+            Log::error('Failed to send password reset code', [
+                'email' => $request->email,
+                'error' => $exception->getMessage(),
+            ]);
+
             return response()->json([
-                'message' => $exception->getMessage(),
+                'message' => __('We could not send the reset code right now. Please try again later.'),
             ], 422);
         }
     }
