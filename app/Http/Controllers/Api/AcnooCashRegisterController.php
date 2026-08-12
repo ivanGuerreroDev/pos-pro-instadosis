@@ -28,11 +28,22 @@ class AcnooCashRegisterController extends Controller
         $userId = $cashRegister->user_id;
         $range = [$cashRegister->opened_at, $endAt];
 
-        $sales = Sale::where('business_id', $businessId)
+        // Money actually collected per sale, grouped by how it was paid, so the
+        // closing screen can show every payment method instead of only cash.
+        $salesByPaymentType = Sale::where('business_id', $businessId)
             ->where('user_id', $userId)
-            ->where('paymentType', 'Cash')
             ->whereBetween('created_at', $range)
-            ->sum('paidAmount');
+            ->selectRaw('paymentType, SUM(paidAmount) as total')
+            ->groupBy('paymentType')
+            ->pluck('total', 'paymentType')
+            ->map(fn ($total) => (float) $total);
+
+        $sales = $salesByPaymentType->get('Cash', 0);
+
+        // Anything not paid in cash (Card, Check, Mobile Pay, ...) settles to
+        // the bank, not the physical drawer. "Due" isn't collected money yet,
+        // so it's excluded from both the cash and the bank totals.
+        $bankSales = $salesByPaymentType->except(['Cash', 'Due'])->sum();
 
         $income = Income::where('business_id', $businessId)
             ->where('user_id', $userId)
@@ -51,6 +62,8 @@ class AcnooCashRegisterController extends Controller
             'total_income' => (float) $income,
             'total_expense' => (float) $expense,
             'expected_balance' => $cashRegister->opening_balance + $sales + $income - $expense,
+            'sales_by_payment_type' => $salesByPaymentType,
+            'total_bank_sales' => (float) $bankSales,
         ];
     }
 
@@ -211,7 +224,16 @@ class AcnooCashRegisterController extends Controller
 
         return response()->json([
             'message' => __('Data saved successfully.'),
-            'data' => $cashRegister->fresh()->load('user:id,name', 'closedByUser:id,name'),
+            // Merge in the payment-method breakdown, which isn't a persisted
+            // column, so the close confirmation shows the same figures the
+            // pre-close preview (current()) already did.
+            'data' => array_merge(
+                $cashRegister->fresh()->load('user:id,name', 'closedByUser:id,name')->toArray(),
+                [
+                    'sales_by_payment_type' => $totals['sales_by_payment_type'],
+                    'total_bank_sales' => $totals['total_bank_sales'],
+                ]
+            ),
         ]);
     }
 }

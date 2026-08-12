@@ -104,6 +104,8 @@ class CashRegisterOpenCloseFlowTest extends TestCase
 
         // expected = 100 (opening) + 40 (cash sale) + 10 (cash income) - 15 (cash expense) = 135
         // difference = counted (130) - expected (135) = -5 (faltante)
+        // total_bank_sales = 500 (Card sale) - the non-cash breakdown must not
+        // leak into the cash-only expected balance above.
         $response->assertOk()
             ->assertJsonPath('data.status', 'closed')
             ->assertJsonPath('data.total_sales', 40)
@@ -111,7 +113,10 @@ class CashRegisterOpenCloseFlowTest extends TestCase
             ->assertJsonPath('data.total_expense', 15)
             ->assertJsonPath('data.closing_expected_balance', 135)
             ->assertJsonPath('data.closing_counted_balance', 130)
-            ->assertJsonPath('data.closing_difference', -5);
+            ->assertJsonPath('data.closing_difference', -5)
+            ->assertJsonPath('data.total_bank_sales', 500)
+            ->assertJsonPath('data.sales_by_payment_type.Cash', 40)
+            ->assertJsonPath('data.sales_by_payment_type.Card', 500);
     }
 
     public function test_closing_an_already_closed_register_fails(): void
