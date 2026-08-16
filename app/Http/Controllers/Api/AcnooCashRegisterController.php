@@ -13,7 +13,15 @@ class AcnooCashRegisterController extends Controller
 {
     protected function ensureCashRegisterPermissionOrFail()
     {
-        if (!(auth()->user()->visibility['cashRegisterPermission'] ?? true)) {
+        $user = auth()->user();
+        // Only staff (Pos) accounts run shifts at the till — the business
+        // owner manages the account but doesn't open/close cash registers.
+        // This mirrors canManageCashRegister() on the Flutter client, which
+        // only guards the UI; without this the rule was bypassable by
+        // calling the API directly.
+        $canManage = $user->role === 'staff' && ($user->visibility['cashRegisterPermission'] ?? true);
+
+        if (!$canManage) {
             return response()->json([
                 'message' => __('You do not have permission to manage the cash register.'),
             ], 403);
